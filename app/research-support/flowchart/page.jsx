@@ -1114,29 +1114,86 @@ export default function FlowchartGenerator() {
         body: JSON.stringify({ prompt }),
       })
 
-      if (!response.ok) throw new Error("Failed to generate flowchart")
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to generate flowchart")
+      }
 
       const data = await response.json()
       console.log("[v0] API Response:", data)
 
-      if (data.mermaid) {
-        const { elements: newElements, connections: newConnections } = parseMermaidToElements(data.mermaid)
+      if (data.diagram) {
+        const { elements: newElements, connections: newConnections } = parseMermaidToElements(data.diagram)
 
         if (newElements.length > 0) {
           setElements(newElements)
           setConnections(newConnections)
-          setMermaidCode(data.mermaid)
+          setMermaidCode(data.diagram)
           showToast("Flowchart generated successfully!", "success")
-          saveToHistory()
         } else {
-          showToast("Failed to parse the generated flowchart", "error")
+          throw new Error("No valid elements could be parsed from the generated diagram")
         }
+      } else {
+        throw new Error("No diagram data received from API")
+      }
+    } catch (error) {
+      console.error("[v0] Error generating flowchart:", error)
+      showToast(error instanceof Error ? error.message : "Failed to generate flowchart", "error")
+    } finally {
+      setIsGenerating(false)
+      setPrompt("")
+    }
+  }
+
+  const handleGenerateFlowchart = async () => {
+    if (!prompt.trim()) {
+      showToast("Please enter a description of your flowchart", "error")
+      return
+    }
+
+    setIsGenerating(true)
+    try {
+      const response = await fetch("/api/flowchart", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to generate flowchart`)
+      }
+
+      const data = await response.json()
+
+      if (data.error) {
+        throw new Error(data.error)
+      }
+
+      if (data.diagram) {
+        const { elements: newElements, connections: newConnections } = parseMermaidToElements(data.diagram)
+
+        if (newElements.length > 0) {
+          setElements(newElements)
+          setConnections(newConnections)
+          setMermaidCode(data.diagram)
+          showToast("Flowchart generated successfully!", "success")
+        } else {
+          throw new Error("Could not parse any valid elements from the generated diagram")
+        }
+      } else {
+        throw new Error("No diagram received from API")
       }
     } catch (error) {
       console.error("[v0] Generation error:", error)
-      showToast("Failed to generate flowchart", "error")
+      showToast(error instanceof Error ? error.message : "Failed to generate flowchart", "error")
     } finally {
       setIsGenerating(false)
+      setPrompt("")
     }
   }
 
@@ -1264,7 +1321,7 @@ export default function FlowchartGenerator() {
                 className="min-h-20 text-sm resize-none"
               />
               <Button
-                onClick={generateFlowchart}
+                onClick={handleGenerateFlowchart}
                 disabled={isGenerating || !prompt.trim()}
                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
               >
