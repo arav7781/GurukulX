@@ -616,54 +616,34 @@ export default function FlowchartGenerator() {
 
   // Simple Mermaid parser for AI-generated code
   const parseMermaidToElements = (mermaidCode) => {
+    console.log("[v0] Parsing mermaid code:", mermaidCode)
+
     const elements = []
     const connections = []
     const lines = mermaidCode.split("\n").filter((line) => line.trim())
 
-    const yPosition = 50
-    const positions = new Map()
-    const processedIds = new Set()
-
     const allNodeIds = new Set()
+    const nodeDefinitions = new Map()
+    const nodeConnections = new Map() // Track connections for layout
 
+    // First pass: collect all node IDs and their definitions
     lines.forEach((line) => {
       const trimmed = line.trim()
 
-      // Skip flowchart declaration line
       if (trimmed.startsWith("flowchart") || trimmed.startsWith("graph")) {
         return
       }
 
       // Extract node IDs from element definitions
-      const elementMatches = trimmed.matchAll(/([A-Za-z0-9_]+)\s*(\[.*?\]|\{.*?\}|$$.*?$$|>.*?\]|{{.*?}})/g)
-      for (const match of elementMatches) {
-        allNodeIds.add(match[1])
-      }
-
-      // Extract node IDs from connections
-      const connectionMatches = trimmed.matchAll(
-        /([A-Za-z0-9_]+)\s*(?:-->|---|==>|-\.->)\s*(?:\|[^|]*\|)?\s*([A-Za-z0-9_]+)/g,
-      )
-      for (const match of connectionMatches) {
-        allNodeIds.add(match[1])
-        allNodeIds.add(match[2])
-      }
-    })
-
-    const nodeDefinitions = new Map()
-
-    lines.forEach((line) => {
-      const trimmed = line.trim()
-
-      // Parse element definitions with improved regex
-      const elementMatches = trimmed.matchAll(/([A-Za-z0-9_]+)\s*(\[.*?\]|\{.*?\}|$$.*?$$|>.*?\]|{{.*?}})/g)
+      const elementMatches = trimmed.matchAll(/([A-Za-z0-9_]+)\s*(\[.*?\]|\{.*?\}|\$\$.*?\$\$|>.*?\]|\{\{.*?\}\})/g)
       for (const match of elementMatches) {
         const [, id, shapeText] = match
+        allNodeIds.add(id)
+
         if (!nodeDefinitions.has(id)) {
           let type = "rectangle"
           const text = shapeText.replace(/[[\]{}()><"]/g, "").trim()
 
-          // Better shape detection
           if (shapeText.includes("{") && shapeText.includes("}")) {
             type = "diamond"
           } else if (shapeText.includes("(") && shapeText.includes(")")) {
@@ -677,82 +657,147 @@ export default function FlowchartGenerator() {
           nodeDefinitions.set(id, { type, text })
         }
       }
-    })
 
-    Array.from(allNodeIds).forEach((id, index) => {
-      if (!processedIds.has(id)) {
-        const definition = nodeDefinitions.get(id)
-        const type = definition?.type || "rectangle"
-        const text =
-          definition?.text ||
-          id
-            .replace(/_/g, " ")
-            .replace(/([A-Z])/g, " $1")
-            .trim()
+      // Extract connections and node IDs from them
+      const connectionMatches = trimmed.matchAll(
+        /([A-Za-z0-9_]+)\s*(?:-->|---|==>|-\.->)\s*(?:\|[^|]*\|)?\s*([A-Za-z0-9_]+)/g,
+      )
+      for (const match of connectionMatches) {
+        const [, from, to] = match
+        allNodeIds.add(from)
+        allNodeIds.add(to)
 
-        const shapeConfig = SHAPE_TYPES.find((s) => s.type === type) || SHAPE_TYPES[0]
-        const xPosition = 150 + (index % 4) * 200
-        const yPos = yPosition + Math.floor(index / 4) * 150
+        // Track connections for layout
+        if (!nodeConnections.has(from)) {
+          nodeConnections.set(from, { children: [], parents: [] })
+        }
+        if (!nodeConnections.has(to)) {
+          nodeConnections.set(to, { children: [], parents: [] })
+        }
 
-        elements.push({
-          id,
-          type,
-          x: xPosition,
-          y: yPos,
-          width: type === "diamond" ? 180 : 150,
-          height: type === "diamond" ? 90 : 70,
-          text: text || `${shapeConfig.name} ${index + 1}`,
-          color: shapeConfig.color,
-          borderColor: shapeConfig.borderColor,
-          textColor: shapeConfig.textColor,
-        })
-
-        processedIds.add(id)
-        positions.set(id, elements[elements.length - 1])
+        nodeConnections.get(from).children.push(to)
+        nodeConnections.get(to).parents.push(from)
       }
     })
 
+    // Find root nodes (nodes with no parents)
+    const rootNodes = Array.from(allNodeIds).filter((id) => {
+      const connections = nodeConnections.get(id)
+      return !connections || connections.parents.length === 0
+    })
+
+    // If no clear root, use the first node
+    if (rootNodes.length === 0 && allNodeIds.size > 0) {
+      rootNodes.push(Array.from(allNodeIds)[0])
+    }
+
+    // Calculate hierarchical positions
+    const positioned = new Set()
+    const levels = new Map() // Track which level each node is on
+    const levelCounts = new Map() // Track how many nodes are on each level
+
+    // BFS to assign levels
+    const queue = rootNodes.map((id) => ({ id, level: 0 }))
+
+    while (queue.length > 0) {
+      const { id, level } = queue.shift()
+
+      if (positioned.has(id)) continue
+
+      positioned.add(id)
+      levels.set(id, level)
+
+      // Count nodes per level
+      levelCounts.set(level, (levelCounts.get(level) || 0) + 1)
+
+      // Add children to queue
+      const connections = nodeConnections.get(id)
+      if (connections && connections.children) {
+        connections.children.forEach((childId) => {
+          if (!positioned.has(childId)) {
+            queue.push({ id: childId, level: level + 1 })
+          }
+        })
+      }
+    }
+
+    // Position nodes based on their level and order within level
+    const levelPositions = new Map() // Track position within each level
+
+    Array.from(allNodeIds).forEach((id) => {
+      const level = levels.get(id) || 0
+      const currentLevelPos = levelPositions.get(level) || 0
+      const nodesInLevel = levelCounts.get(level) || 1
+
+      // Calculate positions with proper spacing
+      const levelSpacing = 200 // Vertical spacing between levels
+      const nodeSpacing = 250 // Horizontal spacing between nodes
+      const startX = 100 // Left margin
+      const startY = 100 // Top margin
+
+      // Center nodes horizontally within their level
+      const totalWidth = (nodesInLevel - 1) * nodeSpacing
+      const levelStartX = startX + Math.max(0, (800 - totalWidth) / 2) // Center on 800px width
+
+      const xPosition = levelStartX + currentLevelPos * nodeSpacing
+      const yPosition = startY + level * levelSpacing
+
+      const definition = nodeDefinitions.get(id)
+      const type = definition?.type || "rectangle"
+      const text =
+        definition?.text ||
+        id
+          .replace(/_/g, " ")
+          .replace(/([A-Z])/g, " $1")
+          .trim()
+
+      const shapeConfig = SHAPE_TYPES.find((s) => s.type === type) || SHAPE_TYPES[0]
+
+      elements.push({
+        id,
+        type,
+        x: xPosition,
+        y: yPosition,
+        width: type === "diamond" ? 180 : 150,
+        height: type === "diamond" ? 90 : 70,
+        text: text || `${shapeConfig.name}`,
+        color: shapeConfig.color,
+        borderColor: shapeConfig.borderColor,
+        textColor: shapeConfig.textColor,
+      })
+
+      levelPositions.set(level, currentLevelPos + 1)
+    })
+
+    // Parse connections
     lines.forEach((line) => {
       const trimmed = line.trim()
 
-      // Parse connections with multiple arrow types and label support
       const connectionPatterns = [
         /([A-Za-z0-9_]+)\s*-->\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/g,
-        /([A-Za-z0-9_]+)\s*-\.->\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/g,
-        /([A-Za-z0-9_]+)\s*==>\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/g,
         /([A-Za-z0-9_]+)\s*---\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/g,
-        /([A-Za-z0-9_]+)\s*-\.\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/g,
+        /([A-Za-z0-9_]+)\s*==>\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/g,
+        /([A-Za-z0-9_]+)\s*-\.->\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/g,
       ]
 
-      for (const pattern of connectionPatterns) {
+      connectionPatterns.forEach((pattern) => {
         const matches = trimmed.matchAll(pattern)
         for (const match of matches) {
           const [, from, label, to] = match
-          if (from && to && allNodeIds.has(from) && allNodeIds.has(to)) {
+          if (from && to) {
             connections.push({
-              id: `conn_${connections.length + 1}`,
+              id: `${from}-${to}`,
               from,
               to,
-              label: (label || "").replace(/['"]/g, "").trim(),
-              points: [],
+              label: label?.trim() || "",
             })
           }
         }
-      }
+      })
     })
 
-    console.log("[v0] Parsed mermaid code:")
-    console.log("[v0] Found node IDs:", Array.from(allNodeIds))
-    console.log("[v0] Created elements:", elements.length)
-    console.log("[v0] Created connections:", connections.length)
-
-    if (elements.length === 0) {
-      console.warn("[v0] No elements parsed from mermaid code, using default structure")
-      return {
-        elements: [...DEFAULT_ELEMENTS],
-        connections: [...DEFAULT_CONNECTIONS],
-      }
-    }
+    console.log("[v0] Generated elements:", elements)
+    console.log("[v0] Generated connections:", connections)
 
     return { elements, connections }
   }
