@@ -188,8 +188,8 @@ const GradientText = ({ children }) => (
 
 export default function FlowchartGenerator() {
   // Core state
-  const [elements, setElements] = useState(DEFAULT_ELEMENTS)
-  const [connections, setConnections] = useState(DEFAULT_CONNECTIONS)
+  const [elements, setElements] = useState([])
+  const [connections, setConnections] = useState([])
   const [selectedElement, setSelectedElement] = useState(null)
   const [selectedConnection, setSelectedConnection] = useState(null)
   
@@ -218,6 +218,15 @@ export default function FlowchartGenerator() {
   // Refs
   const canvasRef = useRef(null)
   const fileInputRef = useRef(null)
+
+  // Initialize with proper default elements
+  useEffect(() => {
+    if (elements.length === 0) {
+      console.log('Initializing default elements')
+      setElements([...DEFAULT_ELEMENTS])
+      setConnections([...DEFAULT_CONNECTIONS])
+    }
+  }, [])
 
   // Generate Mermaid code from elements and connections
   const generateMermaidCode = useCallback(() => {
@@ -421,26 +430,34 @@ export default function FlowchartGenerator() {
     }
   }
 
-  // Add new element with better positioning
+  // Add new element with better positioning and validation
   const addElement = (type) => {
     const shapeConfig = SHAPE_TYPES.find(s => s.type === type)
+    if (!shapeConfig) {
+      console.error('Invalid shape type:', type)
+      return
+    }
     
     // Calculate a good position for new elements
-    const existingPositions = elements.map(el => ({ x: el.x, y: el.y }))
+    const existingPositions = elements?.map(el => ({ x: el.x, y: el.y })) || []
     let newX = 100
     let newY = 100
     
     // Find a free spot
-    while (existingPositions.some(pos => Math.abs(pos.x - newX) < 100 && Math.abs(pos.y - newY) < 100)) {
-      newX += 50
-      if (newX > 500) {
+    let attempts = 0
+    while (attempts < 20 && existingPositions.some(pos => 
+      Math.abs(pos.x - newX) < 120 && Math.abs(pos.y - newY) < 90
+    )) {
+      newX += 160
+      if (newX > 600) {
         newX = 100
-        newY += 100
+        newY += 120
       }
+      attempts++
     }
     
     const newElement = {
-      id: `${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `${type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
       type,
       x: newX,
       y: newY,
@@ -454,19 +471,19 @@ export default function FlowchartGenerator() {
     
     console.log('Adding new element:', newElement)
     
-    setElements(prev => {
-      const newElements = [...prev, newElement]
-      console.log('New elements array:', newElements)
+    setElements(prevElements => {
+      const newElements = [...(prevElements || []), newElement]
+      console.log('Updated elements array:', newElements)
       return newElements
     })
+    
     setSelectedElement(newElement)
+    showToast(`Added ${shapeConfig.name} element`, 'success')
     
     // Save to history after state update
     setTimeout(() => {
       saveToHistory()
     }, 100)
-    
-    showToast(`Added ${shapeConfig.name} element`, 'success')
   }
 
   const deleteSelected = () => {
@@ -1273,59 +1290,68 @@ export default function FlowchartGenerator() {
                 </svg>
               )}
               
-              {/* Connections SVG Layer */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 5 }}>
+              {/* Connections SVG Layer with better rendering */}
+              <svg className="absolute inset-0 w-full h-full" style={{ zIndex: 5, pointerEvents: 'none' }}>
                 <defs>
-                  <marker id="arrowhead" markerWidth="10" markerHeight="7" 
-                   refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">
-                    <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+                  <marker id="arrowhead" markerWidth="10" markerHeight="8" 
+                   refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+                    <polygon points="0 0, 10 4, 0 8" fill="#64748b" />
+                  </marker>
+                  <marker id="arrowhead-selected" markerWidth="10" markerHeight="8" 
+                   refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+                    <polygon points="0 0, 10 4, 0 8" fill="#3b82f6" />
                   </marker>
                 </defs>
                 
-                {connections.map(connection => {
-                  const fromEl = elements.find(el => el.id === connection.from)
-                  const toEl = elements.find(el => el.id === connection.to)
+                {connections && connections.length > 0 && connections.map(connection => {
+                  const fromEl = elements?.find(el => el?.id === connection?.from)
+                  const toEl = elements?.find(el => el?.id === connection?.to)
                   
-                  if (!fromEl || !toEl) return null
+                  if (!fromEl || !toEl || !connection?.id) return null
                   
                   const fromCenter = getElementCenter(fromEl)
                   const toCenter = getElementCenter(toEl)
+                  const isSelected = selectedConnection?.id === connection.id
                   
                   return (
                     <g key={connection.id}>
+                      {/* Connection line */}
                       <line
                         x1={fromCenter.x}
                         y1={fromCenter.y}
                         x2={toCenter.x}
                         y2={toCenter.y}
-                        stroke={selectedConnection?.id === connection.id ? '#3b82f6' : '#64748b'}
-                        strokeWidth={selectedConnection?.id === connection.id ? '3' : '2'}
-                        markerEnd="url(#arrowhead)"
-                        className="cursor-pointer pointer-events-auto"
+                        stroke={isSelected ? '#3b82f6' : '#64748b'}
+                        strokeWidth={isSelected ? '3' : '2'}
+                        markerEnd={isSelected ? "url(#arrowhead-selected)" : "url(#arrowhead)"}
+                        className="cursor-pointer"
+                        style={{ pointerEvents: 'auto' }}
                         onClick={(e) => {
                           e.stopPropagation()
                           setSelectedConnection(connection)
                           setSelectedElement(null)
                         }}
                       />
+                      
+                      {/* Connection label */}
                       {connection.label && (
                         <g>
                           <rect
-                            x={(fromCenter.x + toCenter.x) / 2 - connection.label.length * 4}
-                            y={(fromCenter.y + toCenter.y) / 2 - 12}
+                            x={(fromCenter.x + toCenter.x) / 2 - (connection.label.length * 4)}
+                            y={(fromCenter.y + toCenter.y) / 2 - 10}
                             width={connection.label.length * 8}
                             height={20}
                             fill="white"
                             stroke="#e5e7eb"
                             strokeWidth="1"
-                            rx="3"
+                            rx="4"
                           />
                           <text
                             x={(fromCenter.x + toCenter.x) / 2}
-                            y={(fromCenter.y + toCenter.y) / 2 - 2}
+                            y={(fromCenter.y + toCenter.y) / 2 + 3}
                             textAnchor="middle"
-                            className="fill-gray-700 text-sm font-medium pointer-events-none"
-                            style={{ fontSize: '12px' }}
+                            className="fill-gray-700 font-medium"
+                            style={{ fontSize: '12px', pointerEvents: 'none' }}
                           >
                             {connection.label}
                           </text>
@@ -1336,15 +1362,16 @@ export default function FlowchartGenerator() {
                 })}
               </svg>
 
-              {/* Elements - Fixed rendering */}
-              {elements.map((element, index) => {
-                console.log('Rendering element:', element.id, 'at position:', element.x, element.y)
+              {/* Elements with better text rendering */}
+              {elements && elements.length > 0 && elements.map((element, index) => {
+                if (!element || !element.id) return null
+                
                 return (
                   <div
-                    key={`${element.id}-${index}`}
-                    className={`absolute border-2 rounded-lg cursor-pointer flex items-center justify-center text-sm font-semibold select-none transition-all duration-200 ${
+                    key={element.id}
+                    className={`absolute border-2 cursor-pointer flex items-center justify-center font-medium select-none transition-all duration-200 ${
                       selectedElement?.id === element.id 
-                        ? 'ring-2 ring-blue-500 ring-offset-2 shadow-lg transform scale-105' 
+                        ? 'ring-2 ring-blue-500 ring-offset-1 shadow-lg' 
                         : 'hover:shadow-md'
                     }`}
                     style={{
@@ -1352,36 +1379,49 @@ export default function FlowchartGenerator() {
                       top: `${element.y}px`,
                       width: `${element.width}px`,
                       height: `${element.height}px`,
-                      backgroundColor: element.color,
-                      borderColor: element.borderColor,
-                      color: element.textColor,
+                      backgroundColor: element.color || '#f3f4f6',
+                      borderColor: element.borderColor || '#6b7280',
+                      color: element.textColor || '#374151',
+                      borderRadius: element.type === 'rectangle' ? '8px' : element.type === 'ellipse' ? '50%' : '4px',
                       clipPath: element.type === 'diamond' 
                         ? 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)'
-                        : element.type === 'ellipse'
-                        ? 'ellipse(50% 50%)'
                         : element.type === 'hexagon'
                         ? 'polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%)'
                         : 'none',
                       zIndex: selectedElement?.id === element.id ? 15 : 10,
-                      padding: '8px',
+                      padding: '4px',
                       textAlign: 'center',
-                      lineHeight: '1.2',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                       wordWrap: 'break-word',
-                      overflow: 'hidden',
-                      position: 'absolute',
-                      display: 'flex'
+                      fontSize: '13px',
+                      lineHeight: '1.3',
+                      fontWeight: '600'
                     }}
                     onClick={(e) => {
                       e.stopPropagation()
                       if (tool === 'select') {
+                        console.log('Selected element:', element.id)
                         setSelectedElement(element)
                         setSelectedConnection(null)
                       }
                     }}
                   >
-                    <span className="truncate px-1" style={{ fontSize: '12px', fontWeight: 'bold' }}>
-                      {element.text}
-                    </span>
+                    <div 
+                      style={{ 
+                        maxWidth: `${element.width - 16}px`,
+                        maxHeight: `${element.height - 16}px`,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: element.text && element.text.length > 15 ? 'normal' : 'nowrap',
+                        wordBreak: 'break-word',
+                        hyphens: 'auto',
+                        padding: '2px'
+                      }}
+                    >
+                      {element.text || 'New Element'}
+                    </div>
                   </div>
                 )
               })}
@@ -1389,22 +1429,50 @@ export default function FlowchartGenerator() {
               {/* Connection Preview */}
               {isConnecting && connectingFrom && (
                 <div
-                  className="absolute w-3 h-3 bg-blue-500 rounded-full animate-pulse border-2 border-white shadow-lg"
+                  className="absolute w-4 h-4 bg-blue-500 rounded-full animate-pulse border-2 border-white shadow-lg"
                   style={{
-                    left: getElementCenter(connectingFrom).x - 6,
-                    top: getElementCenter(connectingFrom).y - 6,
-                    zIndex: 20
+                    left: getElementCenter(connectingFrom).x - 8,
+                    top: getElementCenter(connectingFrom).y - 8,
+                    zIndex: 25
                   }}
                 />
               )}
             </div>
 
-            {/* Debug info */}
-            <div className="absolute top-4 left-4 bg-white p-2 rounded shadow text-xs z-50">
-              <div>Elements: {elements.length}</div>
-              <div>Connections: {connections.length}</div>
-              <div>Zoom: {zoom}</div>
-              <div>Selected: {selectedElement?.id || 'none'}</div>
+            {/* Debug info - Enhanced */}
+            <div className="absolute top-4 left-4 bg-white p-3 rounded-lg shadow-lg text-xs z-50 border">
+              <div className="font-semibold text-gray-800 mb-2">Canvas Debug</div>
+              <div className="space-y-1 text-gray-600">
+                <div>Elements: <span className="font-bold text-blue-600">{elements?.length || 0}</span></div>
+                <div>Connections: <span className="font-bold text-green-600">{connections?.length || 0}</span></div>
+                <div>Zoom: <span className="font-bold">{Math.round(zoom * 100)}%</span></div>
+                <div>Tool: <span className="font-bold capitalize">{tool}</span></div>
+                <div>Selected: <span className="font-bold text-purple-600">{selectedElement?.id || 'none'}</span></div>
+                {elements?.length > 0 && (
+                  <div className="mt-2 pt-2 border-t">
+                    <div className="font-medium">Elements List:</div>
+                    {elements.map((el, i) => (
+                      <div key={el.id} className="text-xs">
+                        {i+1}. {el.id} ({el.x}, {el.y})
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {/* Quick reset button */}
+              <button 
+                onClick={() => {
+                  console.log('Resetting to default elements')
+                  setElements([...DEFAULT_ELEMENTS])
+                  setConnections([...DEFAULT_CONNECTIONS])
+                  setSelectedElement(null)
+                  setSelectedConnection(null)
+                }}
+                className="mt-2 px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+              >
+                Reset Default
+              </button>
             </div>
           </div>
 
@@ -1451,7 +1519,7 @@ export default function FlowchartGenerator() {
                 <p><code className="bg-gray-200 px-1 rounded">{'{}'}</code> Diamond (Decision)</p>
                 <p><code className="bg-gray-200 px-1 rounded">([])</code> Ellipse (Start/End)</p>
                 <p><code className="bg-gray-200 px-1 rounded">[//]</code> Parallelogram (I/O)</p>
-                <p><code className="bg-gray-200 px-1 rounded">--></code> Arrow connection</p>
+                <p><code className="bg-gray-200 px-1 rounded">--{">"}</code> Arrow connection</p>
               </div>
             </div>
           </div>
