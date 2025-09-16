@@ -624,7 +624,9 @@ export default function FlowchartGenerator() {
     const positions = new Map()
     const processedIds = new Set()
 
-    lines.forEach((line, index) => {
+    const allNodeIds = new Set()
+
+    lines.forEach((line) => {
       const trimmed = line.trim()
 
       // Skip flowchart declaration line
@@ -632,57 +634,101 @@ export default function FlowchartGenerator() {
         return
       }
 
-      // Parse element definitions - improved regex to catch more patterns
-      const elementMatch = trimmed.match(/^\s*([A-Za-z0-9_]+)\s*(\[.*?\]|\{.*?\}|$$.*?$$|\[\[.*?\]\]|>.*?\])/g)
-      if (elementMatch) {
-        elementMatch.forEach((match) => {
-          const parts = match.match(/^\s*([A-Za-z0-9_]+)\s*(\[.*?\]|\{.*?\}|$$.*?$$|\[\[.*?\]\]|>.*?\])/)
-          if (parts && !processedIds.has(parts[1])) {
-            const [, id, shapeText] = parts
-            let type = "rectangle"
-            const text = shapeText.replace(/[[\]{}()><"]/g, "").trim()
-
-            // Better shape detection
-            if (shapeText.includes("{") && shapeText.includes("}")) type = "diamond"
-            else if (shapeText.includes("(") && shapeText.includes(")")) type = "ellipse"
-            else if (shapeText.includes(">")) type = "parallelogram"
-
-            const shapeConfig = SHAPE_TYPES.find((s) => s.type === type) || SHAPE_TYPES[0]
-            const xPosition = 150 + (elements.length % 4) * 200
-            const yPos = yPosition + Math.floor(elements.length / 4) * 150
-
-            elements.push({
-              id,
-              type,
-              x: xPosition,
-              y: yPos,
-              width: type === "diamond" ? 180 : 150,
-              height: type === "diamond" ? 90 : 70,
-              text: text || `${shapeConfig.name} ${elements.length + 1}`,
-              color: shapeConfig.color,
-              borderColor: shapeConfig.borderColor,
-              textColor: shapeConfig.textColor,
-            })
-
-            processedIds.add(id)
-            positions.set(id, elements[elements.length - 1])
-          }
-        })
+      // Extract node IDs from element definitions
+      const elementMatches = trimmed.matchAll(/([A-Za-z0-9_]+)\s*(\[.*?\]|\{.*?\}|$$.*?$$|>.*?\]|{{.*?}})/g)
+      for (const match of elementMatches) {
+        allNodeIds.add(match[1])
       }
 
-      // Parse connections - improved to handle various arrow types and labels
+      // Extract node IDs from connections
+      const connectionMatches = trimmed.matchAll(
+        /([A-Za-z0-9_]+)\s*(?:-->|---|==>|-\.->)\s*(?:\|[^|]*\|)?\s*([A-Za-z0-9_]+)/g,
+      )
+      for (const match of connectionMatches) {
+        allNodeIds.add(match[1])
+        allNodeIds.add(match[2])
+      }
+    })
+
+    const nodeDefinitions = new Map()
+
+    lines.forEach((line) => {
+      const trimmed = line.trim()
+
+      // Parse element definitions with improved regex
+      const elementMatches = trimmed.matchAll(/([A-Za-z0-9_]+)\s*(\[.*?\]|\{.*?\}|$$.*?$$|>.*?\]|{{.*?}})/g)
+      for (const match of elementMatches) {
+        const [, id, shapeText] = match
+        if (!nodeDefinitions.has(id)) {
+          let type = "rectangle"
+          const text = shapeText.replace(/[[\]{}()><"]/g, "").trim()
+
+          // Better shape detection
+          if (shapeText.includes("{") && shapeText.includes("}")) {
+            type = "diamond"
+          } else if (shapeText.includes("(") && shapeText.includes(")")) {
+            type = "ellipse"
+          } else if (shapeText.includes(">")) {
+            type = "parallelogram"
+          } else if (shapeText.includes("{{") && shapeText.includes("}}")) {
+            type = "hexagon"
+          }
+
+          nodeDefinitions.set(id, { type, text })
+        }
+      }
+    })
+
+    Array.from(allNodeIds).forEach((id, index) => {
+      if (!processedIds.has(id)) {
+        const definition = nodeDefinitions.get(id)
+        const type = definition?.type || "rectangle"
+        const text =
+          definition?.text ||
+          id
+            .replace(/_/g, " ")
+            .replace(/([A-Z])/g, " $1")
+            .trim()
+
+        const shapeConfig = SHAPE_TYPES.find((s) => s.type === type) || SHAPE_TYPES[0]
+        const xPosition = 150 + (index % 4) * 200
+        const yPos = yPosition + Math.floor(index / 4) * 150
+
+        elements.push({
+          id,
+          type,
+          x: xPosition,
+          y: yPos,
+          width: type === "diamond" ? 180 : 150,
+          height: type === "diamond" ? 90 : 70,
+          text: text || `${shapeConfig.name} ${index + 1}`,
+          color: shapeConfig.color,
+          borderColor: shapeConfig.borderColor,
+          textColor: shapeConfig.textColor,
+        })
+
+        processedIds.add(id)
+        positions.set(id, elements[elements.length - 1])
+      }
+    })
+
+    lines.forEach((line) => {
+      const trimmed = line.trim()
+
+      // Parse connections with multiple arrow types and label support
       const connectionPatterns = [
-        /^\s*([A-Za-z0-9_]+)\s*-->\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/,
-        /^\s*([A-Za-z0-9_]+)\s*-\.\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/,
-        /^\s*([A-Za-z0-9_]+)\s*==>\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/,
-        /^\s*([A-Za-z0-9_]+)\s*---\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/,
+        /([A-Za-z0-9_]+)\s*-->\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/g,
+        /([A-Za-z0-9_]+)\s*-\.->\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/g,
+        /([A-Za-z0-9_]+)\s*==>\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/g,
+        /([A-Za-z0-9_]+)\s*---\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/g,
+        /([A-Za-z0-9_]+)\s*-\.\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/g,
       ]
 
       for (const pattern of connectionPatterns) {
-        const connectionMatch = trimmed.match(pattern)
-        if (connectionMatch) {
-          const [, from, label, to] = connectionMatch
-          if (from && to) {
+        const matches = trimmed.matchAll(pattern)
+        for (const match of matches) {
+          const [, from, label, to] = match
+          if (from && to && allNodeIds.has(from) && allNodeIds.has(to)) {
             connections.push({
               id: `conn_${connections.length + 1}`,
               from,
@@ -691,20 +737,23 @@ export default function FlowchartGenerator() {
               points: [],
             })
           }
-          break
         }
       }
     })
 
+    console.log("[v0] Parsed mermaid code:")
+    console.log("[v0] Found node IDs:", Array.from(allNodeIds))
+    console.log("[v0] Created elements:", elements.length)
+    console.log("[v0] Created connections:", connections.length)
+
     if (elements.length === 0) {
-      console.warn("No elements parsed from mermaid code, creating default structure")
+      console.warn("[v0] No elements parsed from mermaid code, using default structure")
       return {
         elements: [...DEFAULT_ELEMENTS],
         connections: [...DEFAULT_CONNECTIONS],
       }
     }
 
-    console.log(`Parsed ${elements.length} elements and ${connections.length} connections`)
     return { elements, connections }
   }
 
