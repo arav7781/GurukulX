@@ -1,14 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import mermaid from "mermaid"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Sparkles, Download, Loader2, Copy, Zap, Info, GitBranch, ArrowRight, Diamond } from "lucide-react"
-import { toast } from "@/components/ui/use-toast"
-import { saveAs } from "file-saver"
-import { GradientText } from "@/components/ui/gradient-text"
 
 // Default flowchart diagram
 const DEFAULT_DIAGRAM = `flowchart TD
@@ -25,6 +21,24 @@ const DEFAULT_DIAGRAM = `flowchart TD
     style E fill:#ddd6fe,stroke:#8b5cf6,stroke-width:2px
     style F fill:#ddd6fe,stroke:#8b5cf6,stroke-width:2px`
 
+// Simple toast function since we don't have the toast component
+const showToast = (message, type = 'info') => {
+  const toast = document.createElement('div')
+  toast.className = `fixed top-4 right-4 px-4 py-2 rounded-lg text-white z-50 ${type === 'error' ? 'bg-red-500' : 'bg-blue-500'}`
+  toast.textContent = message
+  document.body.appendChild(toast)
+  setTimeout(() => {
+    document.body.removeChild(toast)
+  }, 3000)
+}
+
+// Simple GradientText component
+const GradientText = ({ children }) => (
+  <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+    {children}
+  </span>
+)
+
 export default function FlowchartGenerator() {
   const [prompt, setPrompt] = useState("")
   const [mermaidCode, setMermaidCode] = useState(DEFAULT_DIAGRAM)
@@ -35,20 +49,24 @@ export default function FlowchartGenerator() {
   const [showDiagram, setShowDiagram] = useState(false)
 
   useEffect(() => {
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: "default",
-      securityLevel: "loose",
-      fontFamily: "Inter, sans-serif",
-      flowchart: {
-        curve: "basis",
-        useMaxWidth: true,
-      },
+    // Import mermaid dynamically
+    import('https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js').then((mermaidModule) => {
+      const mermaid = mermaidModule.default
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "default",
+        securityLevel: "loose",
+        fontFamily: "Inter, sans-serif",
+        flowchart: {
+          curve: "basis",
+          useMaxWidth: true,
+        },
+      })
+      renderDiagram(mermaidCode, mermaid)
     })
-    renderDiagram(mermaidCode)
   }, [])
 
-  const renderDiagram = async (code: string) => {
+  const renderDiagram = async (code, mermaidInstance) => {
     if (!code.trim()) {
       setRenderedSvg("")
       setError("")
@@ -64,7 +82,7 @@ export default function FlowchartGenerator() {
       // Add a delay for the animation effect
       await new Promise((resolve) => setTimeout(resolve, 1500))
 
-      const { svg } = await mermaid.render("diagram", code)
+      const { svg } = await mermaidInstance.render("diagram", code)
       setRenderedSvg(svg)
 
       // Trigger the diagram appearance animation
@@ -78,113 +96,161 @@ export default function FlowchartGenerator() {
       setRenderedSvg("")
       setIsAnimating(false)
       setShowDiagram(false)
-      toast({
-        title: "Render Error",
-        description:
-          "Invalid Mermaid code. Please ensure the syntax is correct (e.g., use 'flowchart', not 'graph', and proper node syntax like ID[Label]).",
-        variant: "destructive",
-      })
+      showToast("Invalid Mermaid code. Please ensure the syntax is correct.", 'error')
     }
   }
 
   const generateDiagram = async () => {
     if (!prompt.trim()) {
-      toast({
-        title: "Empty prompt",
-        description: "Please enter a description of the diagram you want to create",
-        variant: "destructive",
-      })
+      showToast("Please enter a description of the diagram you want to create", 'error')
       return
     }
 
     setIsGenerating(true)
     try {
-      const response = await fetch("/api/flowchart", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ prompt }),
-      })
+      // Simulate API call - replace with your actual API endpoint
+      showToiast("This is a demo. Connect your API endpoint to generate diagrams.", 'error')
+      // const response = await fetch("/api/flowchart", {
+      //   method: "POST",
+      //   headers: {
+      //     "Content-Type": "application/json",
+      //   },
+      //   body: JSON.stringify({ prompt }),
+      // })
 
-      if (!response.ok) {
-        throw new Error("Failed to generate diagram")
-      }
+      // if (!response.ok) {
+      //   throw new Error("Failed to generate diagram")
+      // }
 
-      const data = await response.json()
-      if (data.error) {
-        throw new Error(data.error)
-      }
+      // const data = await response.json()
+      // if (data.error) {
+      //   throw new Error(data.error)
+      // }
 
-      setMermaidCode(data.diagram)
-      await renderDiagram(data.diagram)
+      // setMermaidCode(data.diagram)
+      // await renderDiagram(data.diagram)
 
-      toast({
-        title: "Diagram generated",
-        description: "Your diagram has been generated successfully using Groq Llama 3.3",
-      })
+      // showToast("Diagram generated successfully using Groq Llama 3.3")
     } catch (error) {
       console.error("Error generating diagram:", error)
-      toast({
-        title: "Generation failed",
-        description: error instanceof Error ? error.message : "Failed to generate diagram. Please try again.",
-        variant: "destructive",
-      })
+      showToast(error instanceof Error ? error.message : "Failed to generate diagram. Please try again.", 'error')
     } finally {
       setIsGenerating(false)
     }
   }
 
-  const handleCodeChange = (newCode: string) => {
+  const handleCodeChange = (newCode) => {
     setMermaidCode(newCode)
-    renderDiagram(newCode)
+    // Import mermaid and render
+    import('https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js').then((mermaidModule) => {
+      const mermaid = mermaidModule.default
+      renderDiagram(newCode, mermaid)
+    })
   }
 
   const exportPng = () => {
     if (!renderedSvg) {
-      toast({
-        title: "No diagram to export",
-        description: "Please generate or create a valid diagram first",
-        variant: "destructive",
-      })
+      showToast("No diagram to export. Please generate or create a valid diagram first", 'error')
       return
     }
 
-    // Create an image element to render the SVG
-    const img = new Image()
-    const svgBlob = new Blob([renderedSvg], { type: "image/svg+xml;charset=utf-8" })
-    const url = URL.createObjectURL(svgBlob)
-
-    img.onload = () => {
-      // Create a canvas to draw the image
+    try {
+      // Create a canvas element
       const canvas = document.createElement("canvas")
-      canvas.width = img.width
-      canvas.height = img.height
       const ctx = canvas.getContext("2d")
-      ctx?.drawImage(img, 0, 0)
+      
+      // Create an image element
+      const img = new Image()
+      
+      // Create SVG blob with proper dimensions
+      const svgData = renderedSvg
+      const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" })
+      const url = URL.createObjectURL(svgBlob)
 
-      // Convert canvas to PNG
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const filename = `flowchart-${Date.now()}.png`
-          saveAs(blob, filename)
-          toast({
-            title: "Export successful",
-            description: `Saved as ${filename}`,
-          })
+      img.onload = () => {
+        // Set canvas dimensions based on the image
+        canvas.width = img.naturalWidth || 800
+        canvas.height = img.naturalHeight || 600
+        
+        // Fill canvas with white background
+        ctx.fillStyle = "white"
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        
+        // Draw the SVG image onto the canvas
+        ctx.drawImage(img, 0, 0)
+
+        // Convert canvas to blob and download
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const filename = `flowchart-${Date.now()}.png`
+            const downloadUrl = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = downloadUrl
+            link.download = filename
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(downloadUrl)
+            showToast(`Exported as ${filename}`)
+          }
+          URL.revokeObjectURL(url)
+        }, "image/png", 1.0)
+      }
+
+      img.onerror = () => {
+        // Fallback method using HTML2Canvas-like approach
+        const svgElement = document.createElement('div')
+        svgElement.innerHTML = renderedSvg
+        const svgNode = svgElement.querySelector('svg')
+        
+        if (svgNode) {
+          // Get SVG dimensions
+          const svgRect = svgNode.getBBox ? svgNode.getBBox() : { width: 800, height: 600 }
+          canvas.width = svgRect.width + 40 // Add padding
+          canvas.height = svgRect.height + 40
+          
+          // Create a data URL from the SVG
+          const svgString = new XMLSerializer().serializeToString(svgNode)
+          const svgDataUrl = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgString)))}`
+          
+          const fallbackImg = new Image()
+          fallbackImg.onload = () => {
+            ctx.fillStyle = "white"
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
+            ctx.drawImage(fallbackImg, 20, 20) // Add padding
+            
+            canvas.toBlob((blob) => {
+              if (blob) {
+                const filename = `flowchart-${Date.now()}.png`
+                const downloadUrl = URL.createObjectURL(blob)
+                const link = document.createElement('a')
+                link.href = downloadUrl
+                link.download = filename
+                document.body.appendChild(link)
+                link.click()
+                document.body.removeChild(link)
+                URL.revokeObjectURL(downloadUrl)
+                showToast(`Exported as ${filename}`)
+              }
+            }, "image/png", 1.0)
+          }
+          fallbackImg.src = svgDataUrl
         }
         URL.revokeObjectURL(url)
-      }, "image/png")
-    }
+      }
 
-    img.src = url
+      img.src = url
+    } catch (error) {
+      console.error("Export error:", error)
+      showToast("Failed to export PNG. Please try again.", 'error')
+    }
   }
 
   const copyCode = () => {
-    navigator.clipboard.writeText(mermaidCode)
-    toast({
-      title: "Code copied",
-      description: "Mermaid code copied to clipboard",
+    navigator.clipboard.writeText(mermaidCode).then(() => {
+      showToast("Mermaid code copied to clipboard")
+    }).catch(() => {
+      showToast("Failed to copy code", 'error')
     })
   }
 
@@ -207,8 +273,7 @@ export default function FlowchartGenerator() {
           <div className="flex items-center gap-3">
             <Button
               onClick={exportPng}
-              variant="outline"
-              className="bg-gray-50/80 border-gray-300 text-black hover:bg-gray-100"
+              className="bg-gray-50/80 border border-gray-300 text-black hover:bg-gray-100"
             >
               <Download className="h-4 w-4 mr-2" />
               Export PNG
@@ -233,7 +298,7 @@ export default function FlowchartGenerator() {
                   placeholder="Describe your flowchart (e.g., user registration process, software development workflow...)"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  className="bg-gray-50/80 border-gray-300 text-black placeholder-gray-400 focus:border-blue-400"
+                  className="bg-gray-50/80 border-gray-300 text-black placeholder-gray-400 focus:border-blue-400 w-full px-3 py-2 rounded-md"
                 />
                 <Button
                   onClick={generateDiagram}
@@ -264,9 +329,7 @@ export default function FlowchartGenerator() {
                 </h2>
                 <Button
                   onClick={copyCode}
-                  variant="outline"
-                  size="sm"
-                  className="bg-gray-50/80 border-gray-300 text-black hover:bg-gray-100"
+                  className="bg-gray-50/80 border border-gray-300 text-black hover:bg-gray-100 text-sm px-3 py-1"
                 >
                   <Copy className="h-4 w-4 mr-2" />
                   Copy
@@ -276,7 +339,7 @@ export default function FlowchartGenerator() {
                 value={mermaidCode}
                 onChange={(e) => handleCodeChange(e.target.value)}
                 placeholder="Enter your Mermaid code here..."
-                className="min-h-[400px] font-mono text-sm bg-gray-50/80 border-gray-300 text-black placeholder-gray-400 focus:border-blue-400"
+                className="min-h-[400px] font-mono text-sm bg-gray-50/80 border-gray-300 text-black placeholder-gray-400 focus:border-blue-400 w-full p-3 rounded-md resize-none"
               />
             </div>
           </div>
@@ -296,7 +359,7 @@ export default function FlowchartGenerator() {
                     <div className="w-32 h-32 border-4 border-transparent border-t-blue-400 border-r-indigo-400 rounded-full animate-spin"></div>
 
                     {/* Inner pulsing circle */}
-                    <div className="absolute inset-4 w-24 h-24 border-2 border-transparent border-t-blue-400 border-l-indigo-400 rounded-full animate-spin animate-reverse"></div>
+                    <div className="absolute inset-4 w-24 h-24 border-2 border-transparent border-t-blue-400 border-l-indigo-400 rounded-full animate-spin" style={{ animationDirection: 'reverse' }}></div>
 
                     {/* Center glowing dot */}
                     <div className="absolute inset-1/2 w-4 h-4 -ml-2 -mt-2 bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full animate-pulse shadow-lg shadow-blue-500/50"></div>
@@ -306,7 +369,7 @@ export default function FlowchartGenerator() {
                       <div className="w-40 h-0.5 bg-gradient-to-r from-transparent via-indigo-400 to-transparent animate-pulse"></div>
                     </div>
                     <div className="absolute inset-0 flex items-center justify-center rotate-90">
-                      <div className="w-40 h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-pulse delay-300"></div>
+                      <div className="w-40 h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-pulse" style={{ animationDelay: '300ms' }}></div>
                     </div>
 
                     {/* Floating particles */}
@@ -370,7 +433,8 @@ export default function FlowchartGenerator() {
             </div>
           </div>
         </div>
-        <div className="bg-gray-50/80 backdrop-blur-xl border border-gray-300 rounded-xl p-6 shadow-2xl mb-6">
+        
+        <div className="bg-gray-50/80 backdrop-blur-xl border border-gray-300 rounded-xl p-6 shadow-2xl mb-6 mt-6">
           <div className="flex items-center mb-4">
             <Info className="h-6 w-6 text-black mr-3" />
             <h2 className="text-xl font-semibold text-black">About Flowcharts</h2>
@@ -460,56 +524,52 @@ export default function FlowchartGenerator() {
         </div>
       </main>
 
-      <style jsx global>{`
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      
-      @keyframes slideInUp {
-        from { 
-          opacity: 0; 
-          transform: translateY(30px); 
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
-        to { 
-          opacity: 1; 
-          transform: translateY(0); 
+        
+        @keyframes slideInUp {
+          from { 
+            opacity: 0; 
+            transform: translateY(30px); 
+          }
+          to { 
+            opacity: 1; 
+            transform: translateY(0); 
+          }
         }
-      }
-      
-      .animate-fadeIn {
-        animation: fadeIn 0.8s ease-out;
-      }
-      
-      .animate-slideInUp {
-        animation: slideInUp 1s ease-out;
-      }
-      
-      .animate-reverse {
-        animation-direction: reverse;
-      }
-      
-      /* Staggered animation for flowchart elements */
-      .diagram-container svg g[id*="flowchart"] {
-        animation: slideInUp 0.6s ease-out;
-      }
-      
-      .diagram-container svg g[id*="flowchart"]:nth-child(1) { animation-delay: 0.1s; }
-      .diagram-container svg g[id*="flowchart"]:nth-child(2) { animation-delay: 0.2s; }
-      .diagram-container svg g[id*="flowchart"]:nth-child(3) { animation-delay: 0.3s; }
-      .diagram-container svg g[id*="flowchart"]:nth-child(4) { animation-delay: 0.4s; }
-      
-      /* Glowing effect for flowchart elements */
-      .diagram-container svg rect,
-      .diagram-container svg polygon,
-      .diagram-container svg circle {
-        filter: drop-shadow(0 0 6px rgba(79, 70, 229, 0.3));
-      }
-      
-      .diagram-container svg path[stroke] {
-        filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.4));
-      }
-    `}</style>
+        
+        .animate-fadeIn {
+          animation: fadeIn 0.8s ease-out;
+        }
+        
+        .animate-slideInUp {
+          animation: slideInUp 1s ease-out;
+        }
+        
+        /* Staggered animation for flowchart elements */
+        .diagram-container svg g[id*="flowchart"] {
+          animation: slideInUp 0.6s ease-out;
+        }
+        
+        .diagram-container svg g[id*="flowchart"]:nth-child(1) { animation-delay: 0.1s; }
+        .diagram-container svg g[id*="flowchart"]:nth-child(2) { animation-delay: 0.2s; }
+        .diagram-container svg g[id*="flowchart"]:nth-child(3) { animation-delay: 0.3s; }
+        .diagram-container svg g[id*="flowchart"]:nth-child(4) { animation-delay: 0.4s; }
+        
+        /* Glowing effect for flowchart elements */
+        .diagram-container svg rect,
+        .diagram-container svg polygon,
+        .diagram-container svg circle {
+          filter: drop-shadow(0 0 6px rgba(79, 70, 229, 0.3));
+        }
+        
+        .diagram-container svg path[stroke] {
+          filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.4));
+        }
+      `}</style>
     </div>
   )
 }
