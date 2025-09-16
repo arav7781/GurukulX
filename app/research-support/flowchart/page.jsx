@@ -1,10 +1,14 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { Input } from "@/components/ui/input"
-import { Sparkles, Download, Loader2, Copy, Zap, Info, GitBranch, ArrowRight, Diamond } from "lucide-react"
+import { useState, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Sparkles, Download, Loader2, Copy, Zap, Info, GitBranch, ArrowRight, Diamond } from "lucide-react";
+import dynamic from "next/dynamic";
+
+// Dynamically import Mermaid with SSR disabled
+const Mermaid = dynamic(() => import("mermaid"), { ssr: false });
 
 // Default flowchart diagram
 const DEFAULT_DIAGRAM = `flowchart TD
@@ -19,240 +23,216 @@ const DEFAULT_DIAGRAM = `flowchart TD
     style C fill:#d1fae5,stroke:#10b981,stroke-width:2px
     style D fill:#d1fae5,stroke:#10b981,stroke-width:2px
     style E fill:#ddd6fe,stroke:#8b5cf6,stroke-width:2px
-    style F fill:#ddd6fe,stroke:#8b5cf6,stroke-width:2px`
+    style F fill:#ddd6fe,stroke:#8b5cf6,stroke-width:2px`;
 
-// Simple toast function since we don't have the toast component
-const showToast = (message, type = 'info') => {
-  const toast = document.createElement('div')
-  toast.className = `fixed top-4 right-4 px-4 py-2 rounded-lg text-white z-50 ${type === 'error' ? 'bg-red-500' : 'bg-blue-500'}`
-  toast.textContent = message
-  document.body.appendChild(toast)
+// Simple toast function
+const showToast = (message, type = "info") => {
+  const toast = document.createElement("div");
+  toast.className = `fixed top-4 right-4 px-4 py-2 rounded-lg text-white z-50 ${
+    type === "error" ? "bg-red-500" : "bg-blue-500"
+  }`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
   setTimeout(() => {
-    document.body.removeChild(toast)
-  }, 3000)
-}
+    document.body.removeChild(toast);
+  }, 3000);
+};
 
 // Simple GradientText component
 const GradientText = ({ children }) => (
   <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
     {children}
   </span>
-)
+);
 
 export default function FlowchartGenerator() {
-  const [prompt, setPrompt] = useState("")
-  const [mermaidCode, setMermaidCode] = useState(DEFAULT_DIAGRAM)
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [renderedSvg, setRenderedSvg] = useState("")
-  const [error, setError] = useState("")
-  const [isAnimating, setIsAnimating] = useState(false)
-  const [showDiagram, setShowDiagram] = useState(false)
+  const [prompt, setPrompt] = useState("");
+  const [mermaidCode, setMermaidCode] = useState(DEFAULT_DIAGRAM);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [renderedSvg, setRenderedSvg] = useState("");
+  const [error, setError] = useState("");
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [showDiagram, setShowDiagram] = useState(false);
+  const mermaidRef = useRef(null);
 
   useEffect(() => {
-    // Import mermaid dynamically
-    import('https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js').then((mermaidModule) => {
-      const mermaid = mermaidModule.default
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: "default",
-        securityLevel: "loose",
-        fontFamily: "Inter, sans-serif",
-        flowchart: {
-          curve: "basis",
-          useMaxWidth: true,
-        },
-      })
-      renderDiagram(mermaidCode, mermaid)
-    })
-  }, [])
+    // Initialize Mermaid
+    Mermaid.initialize({
+      startOnLoad: false,
+      theme: "default",
+      securityLevel: "loose",
+      fontFamily: "Inter, sans-serif",
+      flowchart: {
+        curve: "basis",
+        useMaxWidth: true,
+      },
+    });
+    renderDiagram(mermaidCode);
+  }, []);
 
-  const renderDiagram = async (code, mermaidInstance) => {
+  const renderDiagram = async (code) => {
     if (!code.trim()) {
-      setRenderedSvg("")
-      setError("")
-      setShowDiagram(false)
-      return
+      setRenderedSvg("");
+      setError("");
+      setShowDiagram(false);
+      return;
     }
 
     try {
-      setError("")
-      setIsAnimating(true)
-      setShowDiagram(false)
+      setError("");
+      setIsAnimating(true);
+      setShowDiagram(false);
 
       // Add a delay for the animation effect
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      const { svg } = await mermaidInstance.render("diagram", code)
-      setRenderedSvg(svg)
+      const { svg } = await Mermaid.render("diagram", code);
+      setRenderedSvg(svg);
 
       // Trigger the diagram appearance animation
       setTimeout(() => {
-        setIsAnimating(false)
-        setShowDiagram(true)
-      }, 500)
+        setIsAnimating(false);
+        setShowDiagram(true);
+      }, 500);
     } catch (err) {
-      console.error("Mermaid rendering error:", err)
-      setError(err instanceof Error ? err.message : "Failed to render diagram. Please check the Mermaid code syntax.")
-      setRenderedSvg("")
-      setIsAnimating(false)
-      setShowDiagram(false)
-      showToast("Invalid Mermaid code. Please ensure the syntax is correct.", 'error')
+      console.error("Mermaid rendering error:", err);
+      setError(err instanceof Error ? err.message : "Failed to render diagram. Please check the Mermaid code syntax.");
+      setRenderedSvg("");
+      setIsAnimating(false);
+      setShowDiagram(false);
+      showToast("Invalid Mermaid code. Please ensure the syntax is correct.", "error");
     }
-  }
+  };
 
   const generateDiagram = async () => {
     if (!prompt.trim()) {
-      showToast("Please enter a description of the diagram you want to create", 'error')
-      return
+      showToast("Please enter a description of the diagram you want to create", "error");
+      return;
     }
 
-    setIsGenerating(true)
+    setIsGenerating(true);
     try {
       // Simulate API call - replace with your actual API endpoint
-      showToiast("This is a demo. Connect your API endpoint to generate diagrams.", 'error')
-      // const response = await fetch("/api/flowchart", {
-      //   method: "POST",
-      //   headers: {
-      //     "Content-Type": "application/json",
-      //   },
-      //   body: JSON.stringify({ prompt }),
-      // })
-
-      // if (!response.ok) {
-      //   throw new Error("Failed to generate diagram")
-      // }
-
-      // const data = await response.json()
-      // if (data.error) {
-      //   throw new Error(data.error)
-      // }
-
-      // setMermaidCode(data.diagram)
-      // await renderDiagram(data.diagram)
-
-      // showToast("Diagram generated successfully using Groq Llama 3.3")
+      showToast("This is a demo. Connect your API endpoint to generate diagrams.", "error");
+      // Example API call (uncomment and modify when ready):
+      /*
+      const response = await fetch("/api/flowchart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!response.ok) throw new Error("Failed to generate diagram");
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      setMermaidCode(data.diagram);
+      await renderDiagram(data.diagram);
+      showToast("Diagram generated successfully using Groq Llama 3.3");
+      */
     } catch (error) {
-      console.error("Error generating diagram:", error)
-      showToast(error instanceof Error ? error.message : "Failed to generate diagram. Please try again.", 'error')
+      console.error("Error generating diagram:", error);
+      showToast(error instanceof Error ? error.message : "Failed to generate diagram. Please try again.", "error");
     } finally {
-      setIsGenerating(false)
+      setIsGenerating(false);
     }
-  }
+  };
 
   const handleCodeChange = (newCode) => {
-    setMermaidCode(newCode)
-    // Import mermaid and render
-    import('https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js').then((mermaidModule) => {
-      const mermaid = mermaidModule.default
-      renderDiagram(newCode, mermaid)
-    })
-  }
+    setMermaidCode(newCode);
+    renderDiagram(newCode);
+  };
 
   const exportPng = () => {
     if (!renderedSvg) {
-      showToast("No diagram to export. Please generate or create a valid diagram first", 'error')
-      return
+      showToast("No diagram to export. Please generate or create a valid diagram first", "error");
+      return;
     }
 
     try {
-      // Create a canvas element
-      const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d")
-      
-      // Create an image element
-      const img = new Image()
-      
-      // Create SVG blob with proper dimensions
-      const svgData = renderedSvg
-      const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" })
-      const url = URL.createObjectURL(svgBlob)
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      const img = new Image();
+
+      const svgBlob = new Blob([renderedSvg], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(svgBlob);
 
       img.onload = () => {
-        // Set canvas dimensions based on the image
-        canvas.width = img.naturalWidth || 800
-        canvas.height = img.naturalHeight || 600
-        
-        // Fill canvas with white background
-        ctx.fillStyle = "white"
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
-        
-        // Draw the SVG image onto the canvas
-        ctx.drawImage(img, 0, 0)
+        canvas.width = img.naturalWidth || 800;
+        canvas.height = img.naturalHeight || 600;
 
-        // Convert canvas to blob and download
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+
         canvas.toBlob((blob) => {
           if (blob) {
-            const filename = `flowchart-${Date.now()}.png`
-            const downloadUrl = URL.createObjectURL(blob)
-            const link = document.createElement('a')
-            link.href = downloadUrl
-            link.download = filename
-            document.body.appendChild(link)
-            link.click()
-            document.body.removeChild(link)
-            URL.revokeObjectURL(downloadUrl)
-            showToast(`Exported as ${filename}`)
+            const filename = `flowchart-${Date.now()}.png`;
+            const downloadUrl = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = downloadUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(downloadUrl);
+            showToast(`Exported as ${filename}`);
           }
-          URL.revokeObjectURL(url)
-        }, "image/png", 1.0)
-      }
+          URL.revokeObjectURL(url);
+        }, "image/png", 1.0);
+      };
 
       img.onerror = () => {
-        // Fallback method using HTML2Canvas-like approach
-        const svgElement = document.createElement('div')
-        svgElement.innerHTML = renderedSvg
-        const svgNode = svgElement.querySelector('svg')
-        
+        const svgElement = document.createElement("div");
+        svgElement.innerHTML = renderedSvg;
+        const svgNode = svgElement.querySelector("svg");
+
         if (svgNode) {
-          // Get SVG dimensions
-          const svgRect = svgNode.getBBox ? svgNode.getBBox() : { width: 800, height: 600 }
-          canvas.width = svgRect.width + 40 // Add padding
-          canvas.height = svgRect.height + 40
-          
-          // Create a data URL from the SVG
-          const svgString = new XMLSerializer().serializeToString(svgNode)
-          const svgDataUrl = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgString)))}`
-          
-          const fallbackImg = new Image()
+          const svgRect = svgNode.getBBox ? svgNode.getBBox() : { width: 800, height: 600 };
+          canvas.width = svgRect.width + 40;
+          canvas.height = svgRect.height + 40;
+
+          const svgString = new XMLSerializer().serializeToString(svgNode);
+          const svgDataUrl = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgString)))}`;
+
+          const fallbackImg = new Image();
           fallbackImg.onload = () => {
-            ctx.fillStyle = "white"
-            ctx.fillRect(0, 0, canvas.width, canvas.height)
-            ctx.drawImage(fallbackImg, 20, 20) // Add padding
-            
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(fallbackImg, 20, 20);
+
             canvas.toBlob((blob) => {
               if (blob) {
-                const filename = `flowchart-${Date.now()}.png`
-                const downloadUrl = URL.createObjectURL(blob)
-                const link = document.createElement('a')
-                link.href = downloadUrl
-                link.download = filename
-                document.body.appendChild(link)
-                link.click()
-                document.body.removeChild(link)
-                URL.revokeObjectURL(downloadUrl)
-                showToast(`Exported as ${filename}`)
+                const filename = `flowchart-${Date.now()}.png`;
+                const downloadUrl = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = downloadUrl;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(downloadUrl);
+                showToast(`Exported as ${filename}`);
               }
-            }, "image/png", 1.0)
-          }
-          fallbackImg.src = svgDataUrl
+            }, "image/png", 1.0);
+          };
+          fallbackImg.src = svgDataUrl;
         }
-        URL.revokeObjectURL(url)
-      }
+        URL.revokeObjectURL(url);
+      };
 
-      img.src = url
+      img.src = url;
     } catch (error) {
-      console.error("Export error:", error)
-      showToast("Failed to export PNG. Please try again.", 'error')
+      console.error("Export error:", error);
+      showToast("Failed to export PNG. Please try again.", "error");
     }
-  }
+  };
 
   const copyCode = () => {
     navigator.clipboard.writeText(mermaidCode).then(() => {
-      showToast("Mermaid code copied to clipboard")
+      showToast("Mermaid code copied to clipboard");
     }).catch(() => {
-      showToast("Failed to copy code", 'error')
-    })
-  }
+      showToast("Failed to copy code", "error");
+    });
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
@@ -265,7 +245,8 @@ export default function FlowchartGenerator() {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-center">
-                <GradientText>GX Flowchart Generator</GradientText><span className="text-blue-500"> (Beta)</span>
+                <GradientText>GX Flowchart Generator</GradientText>
+                <span className="text-blue-500"> (Beta)</span>
               </h1>
               <p className="text-sm text-black">Powered by GurukulX-1.0</p>
             </div>
@@ -351,28 +332,24 @@ export default function FlowchartGenerator() {
               Flowchart Preview
             </h2>
             <div className="bg-gray-50/90 border border-gray-300 rounded-lg p-6 min-h-[600px] flex items-center justify-center relative overflow-hidden">
-              {/* Futuristic Loading Animation */}
               {isAnimating && (
                 <div className="absolute inset-0 flex items-center justify-center z-10">
                   <div className="relative">
-                    {/* Outer rotating ring */}
                     <div className="w-32 h-32 border-4 border-transparent border-t-blue-400 border-r-indigo-400 rounded-full animate-spin"></div>
-
-                    {/* Inner pulsing circle */}
-                    <div className="absolute inset-4 w-24 h-24 border-2 border-transparent border-t-blue-400 border-l-indigo-400 rounded-full animate-spin" style={{ animationDirection: 'reverse' }}></div>
-
-                    {/* Center glowing dot */}
+                    <div
+                      className="absolute inset-4 w-24 h-24 border-2 border-transparent border-t-blue-400 border-l-indigo-400 rounded-full animate-spin"
+                      style={{ animationDirection: "reverse" }}
+                    ></div>
                     <div className="absolute inset-1/2 w-4 h-4 -ml-2 -mt-2 bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full animate-pulse shadow-lg shadow-blue-500/50"></div>
-
-                    {/* Scanning lines */}
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="w-40 h-0.5 bg-gradient-to-r from-transparent via-indigo-400 to-transparent animate-pulse"></div>
                     </div>
                     <div className="absolute inset-0 flex items-center justify-center rotate-90">
-                      <div className="w-40 h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-pulse" style={{ animationDelay: '300ms' }}></div>
+                      <div
+                        className="w-40 h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-pulse"
+                        style={{ animationDelay: "300ms" }}
+                      ></div>
                     </div>
-
-                    {/* Floating particles */}
                     <div className="absolute -inset-8">
                       {[...Array(8)].map((_, i) => (
                         <div
@@ -388,8 +365,6 @@ export default function FlowchartGenerator() {
                       ))}
                     </div>
                   </div>
-
-                  {/* Loading text */}
                   <div className="absolute bottom-20 text-center">
                     <div className="text-blue-400 font-mono text-sm mb-2 animate-pulse">Rendering Flowchart...</div>
                     <div className="flex space-x-1 justify-center">
@@ -404,8 +379,6 @@ export default function FlowchartGenerator() {
                   </div>
                 </div>
               )}
-
-              {/* Error State */}
               {error && !isAnimating && (
                 <div className="text-center animate-fadeIn">
                   <div className="text-red-400 mb-2">⚠️ Render Error</div>
@@ -414,15 +387,11 @@ export default function FlowchartGenerator() {
                   </pre>
                 </div>
               )}
-
-              {/* Rendered Diagram with Staggered Animation */}
               {renderedSvg && showDiagram && !error && (
                 <div className="w-full h-full flex items-center justify-center overflow-auto animate-slideInUp">
                   <div className="diagram-container" dangerouslySetInnerHTML={{ __html: renderedSvg }} />
                 </div>
               )}
-
-              {/* Empty State */}
               {!renderedSvg && !error && !isAnimating && (
                 <div className="text-gray-600 text-center animate-fadeIn">
                   <div className="text-4xl mb-4 animate-bounce">📊</div>
@@ -433,7 +402,7 @@ export default function FlowchartGenerator() {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-gray-50/80 backdrop-blur-xl border border-gray-300 rounded-xl p-6 shadow-2xl mb-6 mt-6">
           <div className="flex items-center mb-4">
             <Info className="h-6 w-6 text-black mr-3" />
@@ -496,7 +465,6 @@ export default function FlowchartGenerator() {
           </div>
         </div>
 
-        {/* Footer Info */}
         <div className="mt-8 bg-gray-50/80 backdrop-blur-xl border border-gray-300 rounded-xl p-6 text-center shadow-2xl">
           <div className="max-w-2xl mx-auto">
             <h3 className="text-lg font-semibold text-black mb-2">
@@ -526,50 +494,60 @@ export default function FlowchartGenerator() {
 
       <style jsx>{`
         @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
         }
-        
+
         @keyframes slideInUp {
-          from { 
-            opacity: 0; 
-            transform: translateY(30px); 
+          from {
+            opacity: 0;
+            transform: translateY(30px);
           }
-          to { 
-            opacity: 1; 
-            transform: translateY(0); 
+          to {
+            opacity: 1;
+            transform: translateY(0);
           }
         }
-        
+
         .animate-fadeIn {
           animation: fadeIn 0.8s ease-out;
         }
-        
+
         .animate-slideInUp {
           animation: slideInUp 1s ease-out;
         }
-        
-        /* Staggered animation for flowchart elements */
+
         .diagram-container svg g[id*="flowchart"] {
           animation: slideInUp 0.6s ease-out;
         }
-        
-        .diagram-container svg g[id*="flowchart"]:nth-child(1) { animation-delay: 0.1s; }
-        .diagram-container svg g[id*="flowchart"]:nth-child(2) { animation-delay: 0.2s; }
-        .diagram-container svg g[id*="flowchart"]:nth-child(3) { animation-delay: 0.3s; }
-        .diagram-container svg g[id*="flowchart"]:nth-child(4) { animation-delay: 0.4s; }
-        
-        /* Glowing effect for flowchart elements */
+
+        .diagram-container svg g[id*="flowchart"]:nth-child(1) {
+          animation-delay: 0.1s;
+        }
+        .diagram-container svg g[id*="flowchart"]:nth-child(2) {
+          animation-delay: 0.2s;
+        }
+        .diagram-container svg g[id*="flowchart"]:nth-child(3) {
+          animation-delay: 0.3s;
+        }
+        .diagram-container svg g[id*="flowchart"]:nth-child(4) {
+          animation-delay: 0.4s;
+        }
+
         .diagram-container svg rect,
         .diagram-container svg polygon,
         .diagram-container svg circle {
           filter: drop-shadow(0 0 6px rgba(79, 70, 229, 0.3));
         }
-        
+
         .diagram-container svg path[stroke] {
           filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.4));
         }
       `}</style>
     </div>
-  )
+  );
 }
