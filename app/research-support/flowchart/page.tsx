@@ -1,10 +1,14 @@
-
 "use client"
+
 import { useState, useEffect } from "react"
+import mermaid from "mermaid"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Sparkles, Download, Loader2, Copy, Zap, Info, GitBranch, ArrowRight, Diamond } from "lucide-react"
+import { toast } from "@/components/ui/use-toast"
+import { saveAs } from "file-saver"
+import { GradientText } from "@/components/ui/gradient-text"
 
 // Default flowchart diagram
 const DEFAULT_DIAGRAM = `flowchart TD
@@ -21,22 +25,6 @@ const DEFAULT_DIAGRAM = `flowchart TD
   style E fill:#ddd6fe,stroke:#8b5cf6,stroke-width:2px
   style F fill:#ddd6fe,stroke:#8b5cf6,stroke-width:2px`
 
-const GradientText = ({ children }) => (
-  <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-    {children}
-  </span>
-)
-
-const showToast = (title, description, variant = "default") => {
-  console.log(`Toast: ${title} - ${description}`)
-  // Simple alert fallback since we don't have toast component
-  if (variant === "destructive") {
-    alert(`Error: ${title}\n${description}`)
-  } else {
-    alert(`${title}\n${description}`)
-  }
-}
-
 export default function FlowchartGenerator() {
   const [prompt, setPrompt] = useState("")
   const [mermaidCode, setMermaidCode] = useState(DEFAULT_DIAGRAM)
@@ -47,11 +35,20 @@ export default function FlowchartGenerator() {
   const [showDiagram, setShowDiagram] = useState(false)
 
   useEffect(() => {
-    // Initialize with default diagram
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "default",
+      securityLevel: "loose",
+      fontFamily: "Inter, sans-serif",
+      flowchart: {
+        curve: "basis",
+        useMaxWidth: true,
+      },
+    })
     renderDiagram(mermaidCode)
   }, [])
 
-  const renderDiagram = async (code) => {
+  const renderDiagram = async (code: string) => {
     if (!code.trim()) {
       setRenderedSvg("")
       setError("")
@@ -64,197 +61,181 @@ export default function FlowchartGenerator() {
       setIsAnimating(true)
       setShowDiagram(false)
 
-      // Simple mermaid rendering simulation
+      // Add a delay for the animation effect
       await new Promise((resolve) => setTimeout(resolve, 1500))
 
-      // Create a simple SVG representation for demo
-      const svgContent = `
-        <svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <style>
-              .node { fill: #c7d2fe; stroke: #6366f1; stroke-width: 2px; }
-              .decision { fill: #fef3c7; stroke: #f59e0b; stroke-width: 2px; }
-              .process { fill: #d1fae5; stroke: #10b981; stroke-width: 2px; }
-              .end { fill: #ddd6fe; stroke: #8b5cf6; stroke-width: 2px; }
-              .text { font-family: Arial, sans-serif; font-size: 12px; text-anchor: middle; }
-            </style>
-          </defs>
-          
-          <!-- Start node -->
-          <rect x="250" y="20" width="100" height="40" rx="5" class="node"/>
-          <text x="300" y="43" class="text">🚀 Start</text>
-          
-          <!-- Decision diamond -->
-          <polygon points="300,100 350,125 300,150 250,125" class="decision"/>
-          <text x="300" y="130" class="text">🤔 Choose</text>
-          
-          <!-- Process nodes -->
-          <rect x="150" y="180" width="100" height="40" rx="5" class="process"/>
-          <text x="200" y="203" class="text">✨ Create</text>
-          
-          <rect x="350" y="180" width="100" height="40" rx="5" class="process"/>
-          <text x="400" y="203" class="text">📚 Learn</text>
-          
-          <!-- End node -->
-          <rect x="250" y="260" width="100" height="40" rx="5" class="end"/>
-          <text x="300" y="283" class="text">🎉 Success!</text>
-          
-          <!-- Arrows -->
-          <line x1="300" y1="60" x2="300" y2="100" stroke="#374151" stroke-width="2" marker-end="url(#arrowhead)"/>
-          <line x1="275" y1="140" x2="225" y2="170" stroke="#374151" stroke-width="2" marker-end="url(#arrowhead)"/>
-          <line x1="325" y1="140" x2="375" y2="170" stroke="#374151" stroke-width="2" marker-end="url(#arrowhead)"/>
-          <line x1="200" y1="220" x2="275" y2="255" stroke="#374151" stroke-width="2" marker-end="url(#arrowhead)"/>
-          <line x1="400" y1="220" x2="325" y2="255" stroke="#374151" stroke-width="2" marker-end="url(#arrowhead)"/>
-          
-          <defs>
-            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-              <polygon points="0 0, 10 3.5, 0 7" fill="#374151"/>
-            </marker>
-          </defs>
-        </svg>
-      `
-      
-      setRenderedSvg(svgContent)
+      const { svg } = await mermaid.render("diagram", code)
+      setRenderedSvg(svg)
 
+      // Trigger the diagram appearance animation
       setTimeout(() => {
         setIsAnimating(false)
         setShowDiagram(true)
       }, 500)
     } catch (err) {
-      console.error("Rendering error:", err)
-      setError(err instanceof Error ? err.message : "Failed to render diagram")
+      console.error("Mermaid rendering error:", err)
+      setError(err instanceof Error ? err.message : "Failed to render diagram. Please check the Mermaid code syntax.")
       setRenderedSvg("")
       setIsAnimating(false)
       setShowDiagram(false)
-      showToast("Render Error", "Invalid diagram code. Please check the syntax.", "destructive")
+      toast({
+        title: "Render Error",
+        description: "Invalid Mermaid code. Please ensure the syntax is correct (e.g., use 'flowchart', not 'graph', and proper node syntax like ID[Label]).",
+        variant: "destructive",
+      })
     }
   }
 
   const generateDiagram = async () => {
     if (!prompt.trim()) {
-      showToast("Empty prompt", "Please enter a description of the diagram you want to create", "destructive")
+      toast({
+        title: "Empty prompt",
+        description: "Please enter a description of the diagram you want to create",
+        variant: "destructive",
+      })
       return
     }
 
     setIsGenerating(true)
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // Generate a more complex diagram based on prompt
-      const generatedCode = `flowchart TD
-  A["📝 ${prompt}"] --> B{"Process Step?"}
-  B -->|Yes| C["Execute Task"]
-  B -->|No| D["Skip Step"]
-  C --> E["Review Results"]
-  D --> E
-  E --> F["Complete"]
-  style A fill:#c7d2fe,stroke:#6366f1,stroke-width:2px
-  style B fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
-  style C fill:#d1fae5,stroke:#10b981,stroke-width:2px
-  style D fill:#fecaca,stroke:#ef4444,stroke-width:2px
-  style E fill:#ddd6fe,stroke:#8b5cf6,stroke-width:2px
-  style F fill:#dcfce7,stroke:#16a34a,stroke-width:2px`
+      const response = await fetch("/api/flowchart", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt }),
+      })
 
-      setMermaidCode(generatedCode)
-      await renderDiagram(generatedCode)
-      showToast("Diagram generated", "Your diagram has been generated successfully using GurukulX-1.0")
+      if (!response.ok) {
+        throw new Error("Failed to generate diagram")
+      }
+
+      const data = await response.json()
+      if (data.error) {
+        throw new Error(data.error)
+      }
+
+      setMermaidCode(data.diagram)
+      await renderDiagram(data.diagram)
+      toast({
+        title: "Diagram generated",
+        description: "Your diagram has been generated successfully using Groq Llama 3.3",
+      })
     } catch (error) {
       console.error("Error generating diagram:", error)
-      showToast("Generation failed", "Failed to generate diagram. Please try again.", "destructive")
+      toast({
+        title: "Generation failed",
+        description: error instanceof Error ? error.message : "Failed to generate diagram. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setIsGenerating(false)
     }
   }
 
-  const handleCodeChange = (newCode) => {
+  const handleCodeChange = (newCode: string) => {
     setMermaidCode(newCode)
     renderDiagram(newCode)
   }
 
-  const exportPng = async () => {
+  const exportPng = () => {
     if (!renderedSvg) {
-      showToast("No diagram to export", "Please generate or create a valid diagram first", "destructive")
+      toast({
+        title: "No diagram to export",
+        description: "Please generate or create a valid diagram first",
+        variant: "destructive",
+      })
       return
     }
 
     try {
-      // Create a canvas element
-      const canvas = document.createElement('canvas')
-      const ctx = canvas.getContext('2d')
-      
-      // Set canvas size
-      canvas.width = 800
-      canvas.height = 600
-      
-      // Fill with white background
-      ctx.fillStyle = 'white'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-      
-      // Create an image from SVG
-      const img = new Image()
-      const svgBlob = new Blob([renderedSvg], { type: 'image/svg+xml;charset=utf-8' })
+      // Create SVG blob and parse dimensions
+      const svgBlob = new Blob([renderedSvg], { type: "image/svg+xml;charset=utf-8" })
       const url = URL.createObjectURL(svgBlob)
-      
-      return new Promise((resolve, reject) => {
-        img.onload = () => {
-          try {
-            // Draw the SVG image on canvas
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-            
-            // Convert canvas to blob
-            canvas.toBlob((blob) => {
-              if (blob) {
-                // Create download link
-                const downloadUrl = URL.createObjectURL(blob)
-                const link = document.createElement('a')
-                link.href = downloadUrl
-                link.download = `flowchart-${Date.now()}.png`
-                document.body.appendChild(link)
-                link.click()
-                document.body.removeChild(link)
-                
-                // Clean up
-                URL.revokeObjectURL(url)
-                URL.revokeObjectURL(downloadUrl)
-                
-                showToast("Export successful", `Flowchart exported as PNG`)
-                resolve()
-              } else {
-                reject(new Error('Failed to create blob'))
-              }
-            }, 'image/png', 1.0)
-          } catch (error) {
-            reject(error)
+
+      // Create a temporary container to measure SVG dimensions
+      const tempDiv = document.createElement("div")
+      tempDiv.style.position = "absolute"
+      tempDiv.style.visibility = "hidden"
+      tempDiv.innerHTML = renderedSvg
+      document.body.appendChild(tempDiv)
+
+      const svgElement = tempDiv.querySelector("svg")
+      const width = svgElement?.getAttribute("width") || "800"
+      const height = svgElement?.getAttribute("height") || "600"
+      document.body.removeChild(tempDiv)
+
+      // Create an image element
+      const img = new Image()
+      img.crossOrigin = "anonymous"
+
+      img.onload = () => {
+        try {
+          // Create canvas with SVG dimensions
+          const canvas = document.createElement("canvas")
+          canvas.width = parseInt(width)
+          canvas.height = parseInt(height)
+          const ctx = canvas.getContext("2d")
+          
+          if (!ctx) {
+            throw new Error("Failed to get canvas context")
           }
+
+          // Draw SVG image on canvas
+          ctx.fillStyle = "white"
+          ctx.fillRect(0, 0, canvas.width, canvas.height)
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+          // Convert to PNG and download
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const filename = `flowchart-${Date.now()}.png`
+              saveAs(blob, filename)
+              toast({
+                title: "Export successful",
+                description: `Saved as ${filename}`,
+              })
+            }
+            URL.revokeObjectURL(url)
+          }, "image/png")
+        } catch (error) {
+          console.error("Error during PNG conversion:", error)
+          toast({
+            title: "Export failed",
+            description: "Failed to export PNG. Please try again.",
+            variant: "destructive",
+          })
+          URL.revokeObjectURL(url)
         }
-        
-        img.onerror = () => {
-          reject(new Error('Failed to load SVG image'))
-        }
-        
-        img.src = url
-      })
+      }
+
+      img.onerror = () => {
+        console.error("Failed to load SVG image")
+        toast({
+          title: "Export failed",
+          description: "Failed to load diagram for export. Please try again.",
+          variant: "destructive",
+        })
+        URL.revokeObjectURL(url)
+      }
+
+      img.src = url
     } catch (error) {
-      console.error("Export error:", error)
-      showToast("Export failed", "Failed to export PNG. Please try again.", "destructive")
+      console.error("Error preparing PNG export:", error)
+      toast({
+        title: "Export failed",
+        description: "An error occurred while preparing the export. Please try again.",
+        variant: "destructive",
+      })
     }
   }
 
-  const copyCode = async () => {
-    try {
-      await navigator.clipboard.writeText(mermaidCode)
-      showToast("Code copied", "Mermaid code copied to clipboard")
-    } catch (error) {
-      // Fallback for older browsers
-      const textArea = document.createElement('textarea')
-      textArea.value = mermaidCode
-      document.body.appendChild(textArea)
-      textArea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textArea)
-      showToast("Code copied", "Mermaid code copied to clipboard")
-    }
+  const copyCode = () => {
+    navigator.clipboard.writeText(mermaidCode)
+    toast({
+      title: "Code copied",
+      description: "Mermaid code copied to clipboard",
+    })
   }
 
   return (
