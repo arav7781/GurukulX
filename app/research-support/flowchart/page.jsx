@@ -65,7 +65,7 @@ const DEFAULT_ELEMENTS = [
   { 
     id: 'start_1', 
     type: 'ellipse', 
-    x: 250, 
+    x: 300, 
     y: 50, 
     width: 140, 
     height: 70, 
@@ -77,8 +77,8 @@ const DEFAULT_ELEMENTS = [
   { 
     id: 'decision_1', 
     type: 'diamond', 
-    x: 230, 
-    y: 160, 
+    x: 280, 
+    y: 180, 
     width: 180, 
     height: 90, 
     text: '🤔 Valid Input?', 
@@ -89,8 +89,8 @@ const DEFAULT_ELEMENTS = [
   { 
     id: 'process_1', 
     type: 'rectangle', 
-    x: 100, 
-    y: 300, 
+    x: 150, 
+    y: 330, 
     width: 150, 
     height: 70, 
     text: '✅ Process Data', 
@@ -101,8 +101,8 @@ const DEFAULT_ELEMENTS = [
   { 
     id: 'process_2', 
     type: 'rectangle', 
-    x: 400, 
-    y: 300, 
+    x: 450, 
+    y: 330, 
     width: 150, 
     height: 70, 
     text: '❌ Show Error', 
@@ -113,8 +113,8 @@ const DEFAULT_ELEMENTS = [
   { 
     id: 'end_1', 
     type: 'ellipse', 
-    x: 250, 
-    y: 420, 
+    x: 300, 
+    y: 480, 
     width: 140, 
     height: 70, 
     text: '🎯 End Process', 
@@ -253,12 +253,20 @@ export default function FlowchartGenerator() {
     setMermaidCode(generateMermaidCode())
   }, [generateMermaidCode])
 
-  // Initialize history
+  // Initialize history properly
   useEffect(() => {
-    const initialState = { elements: [...elements], connections: [...connections] }
-    setHistory([initialState])
-    setHistoryIndex(0)
-  }, [])
+    if (elements.length > 0 && history.length === 0) {
+      const initialState = { elements: [...elements], connections: [...connections] }
+      setHistory([initialState])
+      setHistoryIndex(0)
+    }
+  }, [elements, connections, history.length])
+
+  // Debug log to check elements
+  useEffect(() => {
+    console.log('Current elements:', elements)
+    console.log('Current connections:', connections)
+  }, [elements, connections])
 
   // Save state to history
   const saveToHistory = useCallback(() => {
@@ -413,14 +421,29 @@ export default function FlowchartGenerator() {
     }
   }
 
-  // Element management
+  // Add new element with better positioning
   const addElement = (type) => {
     const shapeConfig = SHAPE_TYPES.find(s => s.type === type)
+    
+    // Calculate a good position for new elements
+    const existingPositions = elements.map(el => ({ x: el.x, y: el.y }))
+    let newX = 100
+    let newY = 100
+    
+    // Find a free spot
+    while (existingPositions.some(pos => Math.abs(pos.x - newX) < 100 && Math.abs(pos.y - newY) < 100)) {
+      newX += 50
+      if (newX > 500) {
+        newX = 100
+        newY += 100
+      }
+    }
+    
     const newElement = {
-      id: `${type}_${Date.now()}`,
+      id: `${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       type,
-      x: Math.random() * 400 + 100,
-      y: Math.random() * 300 + 100,
+      x: newX,
+      y: newY,
       width: type === 'diamond' ? 160 : type === 'hexagon' ? 140 : 130,
       height: type === 'diamond' ? 90 : type === 'ellipse' ? 70 : 60,
       text: `New ${shapeConfig.name}`,
@@ -428,9 +451,21 @@ export default function FlowchartGenerator() {
       borderColor: shapeConfig.borderColor,
       textColor: shapeConfig.textColor
     }
-    setElements(prev => [...prev, newElement])
+    
+    console.log('Adding new element:', newElement)
+    
+    setElements(prev => {
+      const newElements = [...prev, newElement]
+      console.log('New elements array:', newElements)
+      return newElements
+    })
     setSelectedElement(newElement)
-    saveToHistory()
+    
+    // Save to history after state update
+    setTimeout(() => {
+      saveToHistory()
+    }, 100)
+    
     showToast(`Added ${shapeConfig.name} element`, 'success')
   }
 
@@ -1208,136 +1243,169 @@ export default function FlowchartGenerator() {
             onMouseUp={handleMouseUp}
             style={{ 
               cursor: tool === 'select' ? 'default' : tool === 'connect' ? 'crosshair' : 'grab',
-              transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
-              transformOrigin: '0 0'
+              minHeight: '600px',
+              position: 'relative'
             }}
           >
-            {/* Grid Background */}
-            {showGrid && (
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
-                <defs>
-                  <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e2e8f0" strokeWidth="1"/>
-                  </pattern>
-                  <pattern id="grid-major" width="100" height="100" patternUnits="userSpaceOnUse">
-                    <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#cbd5e1" strokeWidth="1"/>
-                  </pattern>
-                </defs>
-                <rect width="2000" height="1500" fill="url(#grid)" />
-                <rect width="2000" height="1500" fill="url(#grid-major)" />
-              </svg>
-            )}
-            
-            {/* Connections SVG Layer */}
-            <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 5 }}>
-              <defs>
-                <marker id="arrowhead" markerWidth="10" markerHeight="7" 
-                 refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">
-                  <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
-                </marker>
-              </defs>
+            {/* Fixed Canvas Container */}
+            <div 
+              className="absolute inset-0"
+              style={{ 
+                transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
+                transformOrigin: '0 0',
+                width: '2000px',
+                height: '1500px'
+              }}
+            >
+              {/* Grid Background */}
+              {showGrid && (
+                <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
+                  <defs>
+                    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e2e8f0" strokeWidth="1"/>
+                    </pattern>
+                    <pattern id="grid-major" width="100" height="100" patternUnits="userSpaceOnUse">
+                      <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#cbd5e1" strokeWidth="1"/>
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#grid)" />
+                  <rect width="100%" height="100%" fill="url(#grid-major)" />
+                </svg>
+              )}
               
-              {connections.map(connection => {
-                const fromEl = elements.find(el => el.id === connection.from)
-                const toEl = elements.find(el => el.id === connection.to)
+              {/* Connections SVG Layer */}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 5 }}>
+                <defs>
+                  <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                   refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+                  </marker>
+                </defs>
                 
-                if (!fromEl || !toEl) return null
-                
-                const fromCenter = getElementCenter(fromEl)
-                const toCenter = getElementCenter(toEl)
-                
+                {connections.map(connection => {
+                  const fromEl = elements.find(el => el.id === connection.from)
+                  const toEl = elements.find(el => el.id === connection.to)
+                  
+                  if (!fromEl || !toEl) return null
+                  
+                  const fromCenter = getElementCenter(fromEl)
+                  const toCenter = getElementCenter(toEl)
+                  
+                  return (
+                    <g key={connection.id}>
+                      <line
+                        x1={fromCenter.x}
+                        y1={fromCenter.y}
+                        x2={toCenter.x}
+                        y2={toCenter.y}
+                        stroke={selectedConnection?.id === connection.id ? '#3b82f6' : '#64748b'}
+                        strokeWidth={selectedConnection?.id === connection.id ? '3' : '2'}
+                        markerEnd="url(#arrowhead)"
+                        className="cursor-pointer pointer-events-auto"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedConnection(connection)
+                          setSelectedElement(null)
+                        }}
+                      />
+                      {connection.label && (
+                        <g>
+                          <rect
+                            x={(fromCenter.x + toCenter.x) / 2 - connection.label.length * 4}
+                            y={(fromCenter.y + toCenter.y) / 2 - 12}
+                            width={connection.label.length * 8}
+                            height={20}
+                            fill="white"
+                            stroke="#e5e7eb"
+                            strokeWidth="1"
+                            rx="3"
+                          />
+                          <text
+                            x={(fromCenter.x + toCenter.x) / 2}
+                            y={(fromCenter.y + toCenter.y) / 2 - 2}
+                            textAnchor="middle"
+                            className="fill-gray-700 text-sm font-medium pointer-events-none"
+                            style={{ fontSize: '12px' }}
+                          >
+                            {connection.label}
+                          </text>
+                        </g>
+                      )}
+                    </g>
+                  )
+                })}
+              </svg>
+
+              {/* Elements - Fixed rendering */}
+              {elements.map((element, index) => {
+                console.log('Rendering element:', element.id, 'at position:', element.x, element.y)
                 return (
-                  <g key={connection.id}>
-                    <line
-                      x1={fromCenter.x}
-                      y1={fromCenter.y}
-                      x2={toCenter.x}
-                      y2={toCenter.y}
-                      stroke={selectedConnection?.id === connection.id ? '#3b82f6' : '#64748b'}
-                      strokeWidth={selectedConnection?.id === connection.id ? '3' : '2'}
-                      markerEnd="url(#arrowhead)"
-                      className="cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setSelectedConnection(connection)
-                        setSelectedElement(null)
-                      }}
-                    />
-                    {connection.label && (
-                      <g>
-                        <rect
-                          x={(fromCenter.x + toCenter.x) / 2 - connection.label.length * 4}
-                          y={(fromCenter.y + toCenter.y) / 2 - 12}
-                          width={connection.label.length * 8}
-                          height={20}
-                          fill="white"
-                          stroke="#e5e7eb"
-                          strokeWidth="1"
-                          rx="3"
-                        />
-                        <text
-                          x={(fromCenter.x + toCenter.x) / 2}
-                          y={(fromCenter.y + toCenter.y) / 2 - 2}
-                          textAnchor="middle"
-                          className="fill-gray-700 text-sm font-medium pointer-events-none"
-                          style={{ fontSize: '12px' }}
-                        >
-                          {connection.label}
-                        </text>
-                      </g>
-                    )}
-                  </g>
+                  <div
+                    key={`${element.id}-${index}`}
+                    className={`absolute border-2 rounded-lg cursor-pointer flex items-center justify-center text-sm font-semibold select-none transition-all duration-200 ${
+                      selectedElement?.id === element.id 
+                        ? 'ring-2 ring-blue-500 ring-offset-2 shadow-lg transform scale-105' 
+                        : 'hover:shadow-md'
+                    }`}
+                    style={{
+                      left: `${element.x}px`,
+                      top: `${element.y}px`,
+                      width: `${element.width}px`,
+                      height: `${element.height}px`,
+                      backgroundColor: element.color,
+                      borderColor: element.borderColor,
+                      color: element.textColor,
+                      clipPath: element.type === 'diamond' 
+                        ? 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)'
+                        : element.type === 'ellipse'
+                        ? 'ellipse(50% 50%)'
+                        : element.type === 'hexagon'
+                        ? 'polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%)'
+                        : 'none',
+                      zIndex: selectedElement?.id === element.id ? 15 : 10,
+                      padding: '8px',
+                      textAlign: 'center',
+                      lineHeight: '1.2',
+                      wordWrap: 'break-word',
+                      overflow: 'hidden',
+                      position: 'absolute',
+                      display: 'flex'
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (tool === 'select') {
+                        setSelectedElement(element)
+                        setSelectedConnection(null)
+                      }
+                    }}
+                  >
+                    <span className="truncate px-1" style={{ fontSize: '12px', fontWeight: 'bold' }}>
+                      {element.text}
+                    </span>
+                  </div>
                 )
               })}
-            </svg>
 
-            {/* Elements */}
-            {elements.map(element => (
-              <div
-                key={element.id}
-                className={`absolute border-2 rounded-lg cursor-pointer flex items-center justify-center text-sm font-semibold select-none transition-all duration-200 ${
-                  selectedElement?.id === element.id 
-                    ? 'ring-2 ring-blue-500 ring-offset-2 shadow-lg transform scale-105' 
-                    : 'hover:shadow-md'
-                }`}
-                style={{
-                  left: element.x,
-                  top: element.y,
-                  width: element.width,
-                  height: element.height,
-                  backgroundColor: element.color,
-                  borderColor: element.borderColor,
-                  color: element.textColor,
-                  clipPath: element.type === 'diamond' 
-                    ? 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)'
-                    : element.type === 'ellipse'
-                    ? 'ellipse(50% 50%)'
-                    : element.type === 'hexagon'
-                    ? 'polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%)'
-                    : 'none',
-                  zIndex: selectedElement?.id === element.id ? 15 : 10,
-                  padding: '8px',
-                  textAlign: 'center',
-                  lineHeight: '1.2',
-                  wordWrap: 'break-word',
-                  overflow: 'hidden'
-                }}
-              >
-                <span className="truncate px-1">{element.text}</span>
-              </div>
-            ))}
+              {/* Connection Preview */}
+              {isConnecting && connectingFrom && (
+                <div
+                  className="absolute w-3 h-3 bg-blue-500 rounded-full animate-pulse border-2 border-white shadow-lg"
+                  style={{
+                    left: getElementCenter(connectingFrom).x - 6,
+                    top: getElementCenter(connectingFrom).y - 6,
+                    zIndex: 20
+                  }}
+                />
+              )}
+            </div>
 
-            {/* Connection Preview */}
-            {isConnecting && connectingFrom && (
-              <div
-                className="absolute w-3 h-3 bg-blue-500 rounded-full animate-pulse border-2 border-white shadow-lg"
-                style={{
-                  left: getElementCenter(connectingFrom).x - 6,
-                  top: getElementCenter(connectingFrom).y - 6,
-                  zIndex: 20
-                }}
-              />
-            )}
+            {/* Debug info */}
+            <div className="absolute top-4 left-4 bg-white p-2 rounded shadow text-xs z-50">
+              <div>Elements: {elements.length}</div>
+              <div>Connections: {connections.length}</div>
+              <div>Zoom: {zoom}</div>
+              <div>Selected: {selectedElement?.id || 'none'}</div>
+            </div>
           </div>
 
           {/* Canvas Status Bar */}
