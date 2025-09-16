@@ -31,6 +31,7 @@ import {
   Link,
   Unlink,
   MoreHorizontal,
+  Maximize2,
 } from "lucide-react"
 
 // Shape types with proper configurations
@@ -614,138 +615,130 @@ export default function FlowchartGenerator() {
     }
   }
 
-  const parseMermaidToElements = useCallback((mermaidCode) => {
-    console.log("[v0] Parsing Mermaid code:", mermaidCode)
+  const parseMermaidToElements = (mermaidText) => {
+    console.log("[v0] Parsing Mermaid text:", mermaidText)
 
-    const lines = mermaidCode
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith("flowchart"))
-
+    const lines = mermaidText.split("\n").filter((line) => line.trim() && !line.trim().startsWith("graph"))
     const nodeMap = new Map()
     const connections = []
-    const adjacencyList = new Map()
+    const elements = []
 
-    // First pass: collect all nodes and connections
+    // First pass: Extract all connections and identify nodes
     lines.forEach((line) => {
-      // Skip style lines
-      if (line.startsWith("style ")) return
+      const trimmed = line.trim()
 
-      // Parse connections with various arrow types
-      const connectionMatch = line.match(/(\w+)\s*--[>-]+(?:\|[^|]*\|)?\s*(\w+)/)
+      // Match various arrow patterns: A --> B, A -> B, A --- B, etc.
+      const connectionMatch = trimmed.match(
+        /^([A-Za-z0-9_]+)(?:\[([^\]]+)\])?\s*(-+>|->|-->|---)\s*([A-Za-z0-9_]+)(?:\[([^\]]+)\])?(?:\s*\|\s*([^|]+)\s*\|)?/,
+      )
+
       if (connectionMatch) {
-        const [, from, to] = connectionMatch
-        connections.push({ from, to, label: "" })
+        const [, fromId, fromLabel, arrow, toId, toLabel, edgeLabel] = connectionMatch
 
-        // Build adjacency list for hierarchy
-        if (!adjacencyList.has(from)) adjacencyList.set(from, [])
-        adjacencyList.get(from).push(to)
-
-        // Ensure both nodes exist
-        if (!nodeMap.has(from)) {
-          nodeMap.set(from, { id: from, text: from.replace(/([A-Z])/g, " $1").trim() })
+        // Add nodes to map
+        if (!nodeMap.has(fromId)) {
+          nodeMap.set(fromId, fromLabel || fromId.replace(/([A-Z])/g, " $1").trim())
         }
-        if (!nodeMap.has(to)) {
-          nodeMap.set(to, { id: to, text: to.replace(/([A-Z])/g, " $1").trim() })
+        if (!nodeMap.has(toId)) {
+          nodeMap.set(toId, toLabel || toId.replace(/([A-Z])/g, " $1").trim())
         }
-        return
-      }
 
-      // Parse node definitions
-      const nodeMatch = line.match(/(\w+)(?:\[([^\]]+)\]|$$([^)]+)$$|{([^}]+)}|>([^<]+)<)/)
-      if (nodeMatch) {
-        const [, id, rectText, roundText, rhombusText, flagText] = nodeMatch
-        const text = rectText || roundText || rhombusText || flagText || id.replace(/([A-Z])/g, " $1").trim()
-        nodeMap.set(id, { id, text })
+        // Add connection
+        connections.push({
+          id: `conn_${fromId}_${toId}_${Date.now()}`,
+          from: fromId,
+          to: toId,
+          label: edgeLabel || "",
+        })
+      } else {
+        // Match standalone node definitions: A[Label]
+        const nodeMatch = trimmed.match(/^([A-Za-z0-9_]+)\[([^\]]+)\]/)
+        if (nodeMatch) {
+          const [, nodeId, nodeLabel] = nodeMatch
+          if (!nodeMap.has(nodeId)) {
+            nodeMap.set(nodeId, nodeLabel)
+          }
+        }
       }
     })
 
-    const positionNodes = () => {
-      const positioned = new Map()
-      const levels = new Map()
+    // Create hierarchical layout
+    const nodeIds = Array.from(nodeMap.keys())
+    const levels = new Map()
+    const visited = new Set()
 
-      // Find root nodes (nodes with no incoming connections)
-      const hasIncoming = new Set()
-      connections.forEach((conn) => hasIncoming.add(conn.to))
-      const rootNodes = Array.from(nodeMap.keys()).filter((id) => !hasIncoming.has(id))
+    // Find root nodes (nodes with no incoming connections)
+    const hasIncoming = new Set()
+    connections.forEach((conn) => hasIncoming.add(conn.to))
+    const rootNodes = nodeIds.filter((id) => !hasIncoming.has(id))
 
-      if (rootNodes.length === 0 && nodeMap.size > 0) {
-        // If no clear root, use first node
-        rootNodes.push(Array.from(nodeMap.keys())[0])
-      }
-
-      // BFS to assign levels
-      const queue = rootNodes.map((id) => ({ id, level: 0 }))
-      const visited = new Set()
-
-      while (queue.length > 0) {
-        const { id, level } = queue.shift()
-        if (visited.has(id)) continue
-
-        visited.add(id)
-        if (!levels.has(level)) levels.set(level, [])
-        levels.get(level).push(id)
-
-        // Add children to next level
-        const children = adjacencyList.get(id) || []
-        children.forEach((childId) => {
-          if (!visited.has(childId)) {
-            queue.push({ id: childId, level: level + 1 })
-          }
-        })
-      }
-
-      // Add any unvisited nodes to level 0
-      nodeMap.forEach((_, id) => {
-        if (!visited.has(id)) {
-          if (!levels.has(0)) levels.set(0, [])
-          levels.get(0).push(id)
-        }
-      })
-
-      // Position nodes in each level
-      const levelHeight = 150
-      const nodeWidth = 200
-      const startY = 100
-
-      levels.forEach((nodeIds, level) => {
-        const y = startY + level * levelHeight
-        const totalWidth = (nodeIds.length - 1) * nodeWidth
-        const startX = Math.max(100, (800 - totalWidth) / 2) // Center horizontally
-
-        nodeIds.forEach((id, index) => {
-          const x = startX + index * nodeWidth
-          positioned.set(id, { x, y })
-        })
-      })
-
-      return positioned
+    // If no clear roots, use first node
+    if (rootNodes.length === 0 && nodeIds.length > 0) {
+      rootNodes.push(nodeIds[0])
     }
 
-    const positions = positionNodes()
+    // BFS to assign levels
+    const queue = rootNodes.map((id) => ({ id, level: 0 }))
+    rootNodes.forEach((id) => {
+      levels.set(id, 0)
+      visited.add(id)
+    })
 
-    // Create elements with proper positioning
-    const newElements = Array.from(nodeMap.values()).map((node) => {
-      const pos = positions.get(node.id) || { x: 100, y: 100 }
-      return {
-        id: node.id,
-        text: node.text,
-        type: "rectangle",
-        x: pos.x,
-        y: pos.y,
-        width: 120,
-        height: 60,
-        color: "#e3f2fd",
-        borderColor: "#1976d2",
-        textColor: "#000000",
+    while (queue.length > 0) {
+      const { id: currentId, level } = queue.shift()
+
+      connections.forEach((conn) => {
+        if (conn.from === currentId && !visited.has(conn.to)) {
+          const newLevel = level + 1
+          levels.set(conn.to, newLevel)
+          visited.add(conn.to)
+          queue.push({ id: conn.to, level: newLevel })
+        }
+      })
+    }
+
+    // Handle unvisited nodes
+    nodeIds.forEach((id) => {
+      if (!visited.has(id)) {
+        levels.set(id, 0)
       }
     })
 
-    console.log("[v0] Generated elements:", newElements.length)
-    console.log("[v0] Generated connections:", connections.length)
+    // Group nodes by level and position them
+    const levelGroups = new Map()
+    levels.forEach((level, nodeId) => {
+      if (!levelGroups.has(level)) {
+        levelGroups.set(level, [])
+      }
+      levelGroups.get(level).push(nodeId)
+    })
 
-    return { elements: newElements, connections }
-  }, [])
+    // Create positioned elements
+    levelGroups.forEach((nodeIds, level) => {
+      const y = 100 + level * 200
+      const totalWidth = nodeIds.length * 250
+      const startX = Math.max(100, (1200 - totalWidth) / 2)
+
+      nodeIds.forEach((nodeId, index) => {
+        const x = startX + index * 250
+        elements.push({
+          id: nodeId,
+          type: "default",
+          text: nodeMap.get(nodeId),
+          x,
+          y,
+          width: 180,
+          height: 60,
+          color: "#3b82f6",
+        })
+      })
+    })
+
+    console.log("[v0] Created elements:", elements.length)
+    console.log("[v0] Created connections:", connections.length)
+
+    return { elements, connections }
+  }
 
   // Export functionality
   const exportPng = () => {
@@ -1044,6 +1037,109 @@ export default function FlowchartGenerator() {
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [selectedElement, selectedConnection])
 
+  const handleWheel = (e) => {
+    e.preventDefault()
+    const rect = canvasRef.current.getBoundingClientRect()
+    const mouseX = e.clientX - rect.left
+    const mouseY = e.clientY - rect.top
+
+    const delta = e.deltaY > 0 ? 0.9 : 1.1
+    const newZoom = Math.max(0.1, Math.min(3, zoom * delta))
+
+    // Zoom towards mouse position
+    const zoomPoint = {
+      x: (mouseX - pan.x) / zoom,
+      y: (mouseY - pan.y) / zoom,
+    }
+
+    const newPan = {
+      x: mouseX - zoomPoint.x * newZoom,
+      y: mouseY - zoomPoint.y * newZoom,
+    }
+
+    setZoom(newZoom)
+    setPan(newPan)
+  }
+
+  const fitToView = () => {
+    if (elements.length === 0) return
+
+    const bounds = elements.reduce(
+      (acc, el) => ({
+        minX: Math.min(acc.minX, el.x),
+        minY: Math.min(acc.minY, el.y),
+        maxX: Math.max(acc.maxX, el.x + el.width),
+        maxY: Math.max(acc.maxY, el.y + el.height),
+      }),
+      {
+        minX: Number.POSITIVE_INFINITY,
+        minY: Number.POSITIVE_INFINITY,
+        maxX: Number.NEGATIVE_INFINITY,
+        maxY: Number.NEGATIVE_INFINITY,
+      },
+    )
+
+    const padding = 50
+    const contentWidth = bounds.maxX - bounds.minX + padding * 2
+    const contentHeight = bounds.maxY - bounds.minY + padding * 2
+
+    const canvasRect = canvasRef.current?.getBoundingClientRect()
+    if (!canvasRect) return
+
+    const scaleX = canvasRect.width / contentWidth
+    const scaleY = canvasRect.height / contentHeight
+    const newZoom = Math.min(scaleX, scaleY, 1)
+
+    const newPan = {
+      x: (canvasRect.width - contentWidth * newZoom) / 2 - (bounds.minX - padding) * newZoom,
+      y: (canvasRect.height - contentHeight * newZoom) / 2 - (bounds.minY - padding) * newZoom,
+    }
+
+    setZoom(newZoom)
+    setPan(newPan)
+  }
+
+  // Enhanced generateFlowchart to handle both elements and connections
+  const generateFlowchart = async () => {
+    if (!prompt.trim()) {
+      showToast("Please enter a prompt", "error")
+      return
+    }
+
+    setIsGenerating(true)
+    try {
+      const response = await fetch("/api/flowchart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      })
+
+      if (!response.ok) throw new Error("Failed to generate flowchart")
+
+      const data = await response.json()
+      console.log("[v0] API Response:", data)
+
+      if (data.mermaid) {
+        const { elements: newElements, connections: newConnections } = parseMermaidToElements(data.mermaid)
+
+        if (newElements.length > 0) {
+          setElements(newElements)
+          setConnections(newConnections)
+          setMermaidCode(data.mermaid)
+          showToast("Flowchart generated successfully!", "success")
+          saveToHistory()
+        } else {
+          showToast("Failed to parse the generated flowchart", "error")
+        }
+      }
+    } catch (error) {
+      console.error("[v0] Generation error:", error)
+      showToast("Failed to generate flowchart", "error")
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       {/* Header */}
@@ -1107,7 +1203,6 @@ export default function FlowchartGenerator() {
               </Button>
             </div>
 
-            {/* Zoom Controls */}
             <div className="flex bg-white rounded-lg border border-gray-300 p-1">
               <Button onClick={zoomOut} variant="ghost" size="sm" title="Zoom Out">
                 <ZoomOut className="h-4 w-4" />
@@ -1117,6 +1212,9 @@ export default function FlowchartGenerator() {
               </Button>
               <Button onClick={zoomIn} variant="ghost" size="sm" title="Zoom In">
                 <ZoomIn className="h-4 w-4" />
+              </Button>
+              <Button onClick={fitToView} variant="ghost" size="sm" title="Fit to View">
+                <Maximize2 className="h-4 w-4" />
               </Button>
             </div>
 
@@ -1166,7 +1264,7 @@ export default function FlowchartGenerator() {
                 className="min-h-20 text-sm resize-none"
               />
               <Button
-                onClick={generateFromPrompt}
+                onClick={generateFlowchart}
                 disabled={isGenerating || !prompt.trim()}
                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
               >
@@ -1362,6 +1460,7 @@ export default function FlowchartGenerator() {
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
+            onWheel={handleWheel}
             style={{
               cursor: tool === "select" ? "default" : tool === "connect" ? "crosshair" : "grab",
               minHeight: "600px",
