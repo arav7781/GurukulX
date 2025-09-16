@@ -1451,7 +1451,7 @@ export default function FlowchartGenerator() {
                 <p><code className="bg-gray-200 px-1 rounded">{'{}'}</code> Diamond (Decision)</p>
                 <p><code className="bg-gray-200 px-1 rounded">([])</code> Ellipse (Start/End)</p>
                 <p><code className="bg-gray-200 px-1 rounded">[//]</code> Parallelogram (I/O)</p>
-                <p><code className="bg-gray-200 px-1 rounded">--{">"}</code> Arrow connection</p>
+                <p><code className="bg-gray-200 px-1 rounded">--></code> Arrow connection</p>
               </div>
             </div>
           </div>
