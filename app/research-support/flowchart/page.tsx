@@ -249,7 +249,7 @@ export default function FlowchartGenerator() {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-center text-black">
-                <GradientText className="text-black">GX Flowchart Generator</GradientText>
+                <GradientText className="text-black">Flowchart Generator</GradientText>
                 <span className="text-blue-500"> (Beta)</span>
               </h1>
               <p className="text-sm text-black">Powered by GurukulX-1.0</p>
