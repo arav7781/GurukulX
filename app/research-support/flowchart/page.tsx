@@ -248,8 +248,8 @@ export default function FlowchartGenerator() {
               <Zap className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-center">
-                <GradientText>GX Flowchart Generator</GradientText>
+              <h1 className="text-3xl font-bold text-center text-black">
+                <GradientText className="text-black">GX Flowchart Generator</GradientText>
                 <span className="text-blue-500"> (Beta)</span>
               </h1>
               <p className="text-sm text-black">Powered by GurukulX-1.0</p>
