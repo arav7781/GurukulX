@@ -248,13 +248,13 @@ export default function QuestionPaperGenerator() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6 p-6">
-                <div>
+                <div className="text-black">
                   <label className="text-sm font-semibold text-gray-700 mb-2 block">Subject</label>
                   <Select value={subject} onValueChange={setSubject}>
-                    <SelectTrigger className="w-full bg-white border-2 border-gray-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all">
+                    <SelectTrigger className=" text-black w-full bg-white border-2 border-gray-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all">
                       <SelectValue placeholder="Select subject" />
                     </SelectTrigger>
-                    <SelectContent className="bg-white border-gray-200">
+                    <SelectContent className="bg-white border-gray-200 text-black">
                       <SelectItem value="mathematics">Mathematics</SelectItem>
                       <SelectItem value="physics">Physics</SelectItem>
                       <SelectItem value="chemistry">Chemistry</SelectItem>
