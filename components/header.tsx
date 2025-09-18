@@ -19,7 +19,7 @@ export default function Header() {
     { name: "Question Paper", href: "/student-engagement/chatbot", icon: FileText },
     { name: "Coding Assistant", href: "/ai-assistants/coding", icon: Bot },
     { name: "Pricing", href: "/pricing", icon: DollarSign },
-    { name: "Developer Portfolio", href: "https://arav-portfolio.vercel.app/", icon: Globe, external: true },
+    { name: "RAG Chatbot", href: "https://legal-search-case-files.vercel.app/chatbot", icon: Globe, external: true },
     { name: "GitHub", href: "https://github.com/arav7781/GurukulX", icon: Globe, external: true },
   ]
 
